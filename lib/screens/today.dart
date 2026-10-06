@@ -8,7 +8,6 @@ import '../prefs.dart';
 import '../theme.dart';
 import 'activity_edit.dart';
 import 'entry_edit.dart';
-import 'weight.dart';
 
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
@@ -63,7 +62,7 @@ class _TodayScreenState extends State<TodayScreen> {
     }
   }
 
-  /// Jedno wejście do dodawania: posiłek, aktywność, waga.
+  /// Jedyne wejście do dodawania na tym ekranie: posiłek albo aktywność (wagę dodaje się w zakładce Waga).
   Future<void> _showAddSheet() async {
     final kind = await showModalBottomSheet<AddKind>(
       context: context,
@@ -80,15 +79,11 @@ class _TodayScreenState extends State<TodayScreen> {
             for (final (k, title, subtitle) in [
               (AddKind.meal, 'Posiłek lub napój', 'Zdjęcie, etykieta albo opis'),
               (AddKind.activity, 'Aktywność', 'Ręcznie albo ze zrzutu z aplikacji, zegarka, maszyny'),
-              (AddKind.weight, 'Waga', 'Najlepiej rano, przed śniadaniem'),
             ])
-              EmptyCard(
-                      kind: k,
-                      title: title,
-                      subtitle: subtitle,
-                      onTap: () => Navigator.pop(c, k),
-                      margin: EdgeInsets.zero)
-                  .withSpacing(),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: AddOption(kind: k, title: title, subtitle: subtitle, onTap: () => Navigator.pop(c, k)),
+              ),
           ]),
         ),
       ),
@@ -99,8 +94,6 @@ class _TodayScreenState extends State<TodayScreen> {
         await _open();
       case AddKind.activity:
         await _openActivity();
-      case AddKind.weight:
-        if (await addWeight(context)) await _load();
     }
   }
 
@@ -176,17 +169,12 @@ class _TodayScreenState extends State<TodayScreen> {
             ),
             if (_entries.isEmpty) ...[
               const SectionHeader('Posiłki'),
-              EmptyCard(
-                kind: AddKind.meal,
-                title: 'Brak posiłków',
-                subtitle: 'Zrób zdjęcie albo opisz posiłek, a AI policzy kalorie',
-                onTap: () => _open(),
-              ),
+              const _EmptyText('Brak posiłków'),
             ],
             for (final m in MealType.values)
               if (groups[m] != null)
                 _MealGroup(meal: m, entries: groups[m]!, onOpen: (e) => _open(entry: e), onDeleted: _load),
-            _ActivitySection(acts: _acts, onAdd: () => _openActivity(), onOpen: _openActivity),
+            _ActivitySection(acts: _acts, onOpen: _openActivity),
             _CompleteDay(complete: _complete, onChanged: _setComplete),
           ],
         ),
@@ -196,9 +184,8 @@ class _TodayScreenState extends State<TodayScreen> {
 }
 
 class _ActivitySection extends StatelessWidget {
-  const _ActivitySection({required this.acts, required this.onAdd, required this.onOpen});
+  const _ActivitySection({required this.acts, required this.onOpen});
   final List<Activity> acts;
-  final VoidCallback onAdd;
   final void Function(Activity) onOpen;
 
   @override
@@ -208,12 +195,7 @@ class _ActivitySection extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SectionHeader('Aktywność', trailing: acts.isEmpty ? null : '+${fmtNum(total)} kcal'),
       if (acts.isEmpty)
-        EmptyCard(
-          kind: AddKind.activity,
-          title: 'Brak aktywności',
-          subtitle: 'Trening podniesie dzisiejszy limit kalorii',
-          onTap: onAdd,
-        )
+        const _EmptyText('Brak aktywności')
       else
         Card(
           clipBehavior: Clip.antiAlias,
@@ -255,11 +237,10 @@ class _ActivitySection extends StatelessWidget {
   }
 }
 
-/// Rodzaje wpisów: jeden kolor i ikona na rodzaj, używane w arkuszu „Dodaj”, pustych stanach i wierszach.
+/// Rodzaje wpisów: jeden kolor i ikona na rodzaj, używane w arkuszu „Dodaj” i w wierszach.
 enum AddKind {
   meal(Icons.restaurant_rounded, Color(0xFFF7ECE8), Color(0xFFB07F70)),
-  activity(Icons.directions_run_rounded, Color(0xFFE9F3EF), Color(0xFF4F8B76)),
-  weight(Icons.monitor_weight_outlined, heatherSoft, heather);
+  activity(Icons.directions_run_rounded, Color(0xFFE9F3EF), Color(0xFF4F8B76));
 
   const AddKind(this.icon, this.bg, this.fg);
   final IconData icon;
@@ -301,23 +282,31 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// Karta-zaproszenie: pusty stan sekcji i pozycja w arkuszu „Dodaj”.
-class EmptyCard extends StatelessWidget {
-  const EmptyCard(
-      {super.key, required this.kind, required this.title, required this.subtitle, required this.onTap, this.margin});
+/// Pusty stan sekcji: sam tekst, bez karty i bez akcji (dodaje się wyłącznie przyciskiem „Dodaj”).
+class _EmptyText extends StatelessWidget {
+  const _EmptyText(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
+        child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+      );
+}
+
+/// Pozycja w arkuszu „Dodaj”.
+class AddOption extends StatelessWidget {
+  const AddOption({super.key, required this.kind, required this.title, required this.subtitle, required this.onTap});
   final AddKind kind;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final EdgeInsets? margin;
-
-  Widget withSpacing() => Padding(padding: const EdgeInsets.only(bottom: 8), child: this);
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     return Card(
-      margin: margin,
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
