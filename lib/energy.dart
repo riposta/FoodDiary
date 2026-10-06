@@ -56,6 +56,22 @@ List<WeighIn> weightTrend(List<WeighIn> weighIns) {
   return out;
 }
 
+/// Pomija pojedyncze ważenia odstające o > 3 kg od mediany sąsiadów (literówki typu 9,2 zamiast 92).
+/// Trwała zmiana (np. po urlopie) zostaje, bo potwierdzają ją kolejne ważenia.
+List<WeighIn> withoutOutliers(List<WeighIn> pts) {
+  if (pts.length < 3) return pts;
+  final out = <WeighIn>[];
+  for (var i = 0; i < pts.length; i++) {
+    final near = [
+      for (var j = max(0, i - 2); j <= min(pts.length - 1, i + 2); j++)
+        if (j != i) pts[j].kg,
+    ]..sort();
+    final median = near.length.isOdd ? near[near.length ~/ 2] : (near[near.length ~/ 2 - 1] + near[near.length ~/ 2]) / 2;
+    if ((pts[i].kg - median).abs() <= 3) out.add(pts[i]);
+  }
+  return out;
+}
+
 /// Ostatnia wartość trendu z dnia [day] lub wcześniejsza.
 double? trendAt(List<WeighIn> trend, DateTime day) {
   double? v;
@@ -118,6 +134,7 @@ EnergyEstimate estimateEnergy({
   required Map<DateTime, double> activityKcal,
   required DateTime today,
 }) {
+  weighIns = withoutOutliers(weighIns);
   final trend = weightTrend(weighIns);
   final weight = trend.isEmpty ? profile.weight : trend.last.kg;
   final bmr = mifflin(profile, weight);

@@ -72,6 +72,7 @@ class Prefs {
   Set<String> notifOff = {}; // wyłączone typy powiadomień
   int weighMinutes = 7 * 60 + 30; // godzina przypomnienia o ważeniu
   double? lastNotifiedBase; // do powiadomienia o zmianie zapotrzebowania
+  bool notifAsked = false; // czy pytaliśmy o zgodę na powiadomienia
 
   Values get norms => {...defaultNorms(profile), ...overrides};
 
@@ -98,6 +99,7 @@ class Prefs {
       ..notifOff = (sp.getStringList('notif_off') ?? []).toSet()
       ..weighMinutes = sp.getInt('weigh_minutes') ?? 7 * 60 + 30
       ..lastNotifiedBase = sp.getDouble('last_notified_base')
+      ..notifAsked = sp.getBool('notif_asked') ?? false
       ..apiKey = await _secure.read(key: 'api_key') ?? '';
     if (prefs.apiKey.isEmpty) prefs.apiKey = _builtInKey;
   }
@@ -118,6 +120,7 @@ class Prefs {
     await sp.setStringList('notif_off', notifOff.toList());
     await sp.setInt('weigh_minutes', weighMinutes);
     lastNotifiedBase == null ? await sp.remove('last_notified_base') : await sp.setDouble('last_notified_base', lastNotifiedBase!);
+    await sp.setBool('notif_asked', notifAsked);
     await sp.setString('base_url', baseUrl);
     await sp.setString('model', model);
     await _secure.write(key: 'api_key', value: apiKey);

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../db.dart';
 import '../energy.dart';
 import '../models.dart';
+import '../notifications.dart';
 import '../prefs.dart';
 import '../theme.dart';
 
@@ -38,7 +39,18 @@ class _WeightScreenState extends State<WeightScreen> {
     final last = _weights.lastOrNull;
     final r = await showDialog<WeightEntry>(context: context, builder: (_) => _WeightDialog(initialKg: last?.kg));
     if (r == null) return;
+    final before = weightTrend(withoutOutliers([for (final w in _weights) (day: w.day, kg: w.kg)])).lastOrNull?.kg;
     await Db.saveWeight(r);
+    final all = await Db.weights();
+    final after = weightTrend(withoutOutliers([for (final w in all) (day: w.day, kg: w.kg)])).last.kg;
+    final m =
+        before == null ? null : milestone(start: all.first.kg, before: before, after: after, goal: prefs.goalWeight);
+    if (m != null) {
+      await Notifications.show(
+          NotifKind.milestone, m, 'Trend wagi: ${fmtExact(double.parse(after.toStringAsFixed(1)))} kg',
+          payload: 'weight');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    }
     if (_weights.every((w) => !w.day.isAfter(r.day))) {
       prefs.profile.weight = r.kg; // profil śledzi ostatnie ważenie (wzór, gdy brak trendu)
       await prefs.save();
@@ -67,7 +79,7 @@ class _WeightScreenState extends State<WeightScreen> {
     final t = Theme.of(context).textTheme;
     final e = _energy;
     final pts = [for (final w in _weights) (day: w.day, kg: w.kg)];
-    final trend = weightTrend(pts);
+    final trend = weightTrend(withoutOutliers(pts));
     final goal = prefs.goalWeight;
 
     return Scaffold(
@@ -460,7 +472,14 @@ class _WeightDialogState extends State<_WeightDialog> {
           controller: _kg,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(suffixText: 'kg', hintText: 'np. 92,4'),
+          decoration: InputDecoration(
+            suffixText: 'kg',
+            hintText: 'np. 92,4',
+            helperText: kg != null && widget.initialKg != null && (kg - widget.initialKg!).abs() > 3
+                ? 'Duża różnica od ostatniego ważenia (${fmtExact(widget.initialKg!)} kg). Sprawdź, czy nie ma literówki.'
+                : null,
+            helperMaxLines: 2,
+          ),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),

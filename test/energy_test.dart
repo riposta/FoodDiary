@@ -122,4 +122,16 @@ void main() {
     expect(n['protein'], closeTo(2000 * .2 / 4, 1e-9));
     expect(n['fiber'], 30);
   });
+
+  test('literówka w wadze nie psuje trendu ani zapotrzebowania', () {
+    final s = simulate();
+    final typo = [...s.w]..[20] = (day: s.w[20].day, kg: 9.2);
+    final clean = estimateEnergy(profile: profile, weighIns: s.w, intake: s.intake, activityKcal: {}, today: d(28));
+    final dirty = estimateEnergy(profile: profile, weighIns: typo, intake: s.intake, activityKcal: {}, today: d(28));
+    expect(dirty.base, closeTo(clean.base, 20));
+    expect(withoutOutliers(typo).length, typo.length - 1);
+    // trwała zmiana (3 ważenia +4 kg) zostaje
+    final shift = [for (var i = 0; i < 6; i++) (day: d(i), kg: i < 3 ? 90.0 : 94.0)];
+    expect(withoutOutliers(shift).length, 6);
+  });
 }

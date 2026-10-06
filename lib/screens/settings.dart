@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ai.dart';
 import '../backup.dart';
+import '../notifications.dart';
 import '../models.dart';
 import '../prefs.dart';
 import '../theme.dart';
@@ -58,7 +59,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (ok != true) return;
     try {
-      if (await importBackup()) _snack('Przywrócono kopię zapasową');
+      if (await importBackup()) {
+        _snack('Przywrócono kopię zapasową');
+        await Notifications.reschedule();
+      }
     } catch (e) {
       _snack('Import nieudany: ${e.toString().replaceFirst('Exception: ', '')}');
     }
@@ -181,15 +185,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: FilledButton.icon(onPressed: _save, icon: const Icon(Icons.check), label: const Text('Zapisz ustawienia')),
+          child: FilledButton.icon(
+              onPressed: _save, icon: const Icon(Icons.check), label: const Text('Zapisz ustawienia')),
         ),
+        _section('Powiadomienia', [
+          for (final k in NotifKind.values)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(k.label),
+              subtitle: Text(k.description, style: Theme.of(context).textTheme.bodySmall),
+              value: !_p.notifOff.contains(k.name),
+              onChanged: (v) async {
+                setState(() => v ? _p.notifOff.remove(k.name) : _p.notifOff.add(k.name));
+                await _p.save();
+                if (v) await Notifications.askPermissionOnce();
+                await Notifications.reschedule();
+              },
+            ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.alarm_rounded, color: heather),
+            title: const Text('Godzina ważenia'),
+            trailing: Text(
+              '${_p.weighMinutes ~/ 60}:${(_p.weighMinutes % 60).toString().padLeft(2, '0')}',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            onTap: () async {
+              final t = await showTimePicker(
+                  context: context, initialTime: TimeOfDay(hour: _p.weighMinutes ~/ 60, minute: _p.weighMinutes % 60));
+              if (t == null) return;
+              setState(() => _p.weighMinutes = t.hour * 60 + t.minute);
+              await _p.save();
+              await Notifications.reschedule();
+            },
+          ),
+          Text('Cisza nocna 22:00–7:00, najwyżej 3 powiadomienia dziennie.',
+              style: Theme.of(context).textTheme.bodySmall),
+        ]),
         _section('Kopia zapasowa', [
           const Text('Plik ZIP z wpisami i zdjęciami. Zapisz go np. na Dysku Google lub wyślij sobie mailem.',
               style: TextStyle(color: inkMuted)),
           Row(children: [
-            Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.upload), label: const Text('Eksportuj'))),
+            Expanded(
+                child: OutlinedButton.icon(
+                    onPressed: _export, icon: const Icon(Icons.upload), label: const Text('Eksportuj'))),
             const SizedBox(width: 8),
-            Expanded(child: OutlinedButton.icon(onPressed: _import, icon: const Icon(Icons.download), label: const Text('Importuj'))),
+            Expanded(
+                child: OutlinedButton.icon(
+                    onPressed: _import, icon: const Icon(Icons.download), label: const Text('Importuj'))),
           ]),
         ]),
       ],

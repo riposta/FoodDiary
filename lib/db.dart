@@ -79,6 +79,7 @@ class Db {
     } else {
       await _db.update('entries', e.toMap(), where: 'id = ?', whereArgs: [e.id]);
     }
+    _changed();
   }
 
   static Future<void> delete(Entry e) async {
@@ -87,6 +88,7 @@ class Db {
       final f = photoFile(e.photo!);
       if (await f.exists()) await f.delete();
     }
+    _changed();
   }
 
   /// Wpisy z dni [from, to] włącznie.
@@ -102,14 +104,29 @@ class Db {
 
   static Future<List<Entry>> day(DateTime d) => range(d, d);
 
+  static Future<DateTime?> firstEntryDay() async {
+    final r = await _db.rawQuery('SELECT MIN(eaten_at) AS m FROM entries');
+    final m = r.first['m'] as String?;
+    return m == null ? null : dayOf(DateTime.parse(m));
+  }
+
+  /// Wywoływane po każdej zmianie danych (wpis, waga, aktywność, zatwierdzenie dnia, import).
+  /// W aplikacji planuje od nowa powiadomienia; w testach puste.
+  static Future<void> Function()? onChanged;
+  static void _changed() => onChanged?.call();
+
   // ---------- waga ----------
 
   /// Jedno ważenie na dzień: nowy wpis z tego samego dnia zastępuje poprzedni.
   static Future<void> saveWeight(WeightEntry w) async {
     w.id = await _db.insert('weights', w.toMap()..remove('id'), conflictAlgorithm: ConflictAlgorithm.replace);
+    _changed();
   }
 
-  static Future<void> deleteWeight(WeightEntry w) => _db.delete('weights', where: 'id = ?', whereArgs: [w.id]);
+  static Future<void> deleteWeight(WeightEntry w) async {
+    await _db.delete('weights', where: 'id = ?', whereArgs: [w.id]);
+    _changed();
+  }
 
   static Future<List<WeightEntry>> weights() async =>
       (await _db.query('weights', orderBy: 'day')).map(WeightEntry.fromMap).toList();
@@ -122,9 +139,13 @@ class Db {
     } else {
       await _db.update('activities', a.toMap(), where: 'id = ?', whereArgs: [a.id]);
     }
+    _changed();
   }
 
-  static Future<void> deleteActivity(Activity a) => _db.delete('activities', where: 'id = ?', whereArgs: [a.id]);
+  static Future<void> deleteActivity(Activity a) async {
+    await _db.delete('activities', where: 'id = ?', whereArgs: [a.id]);
+    _changed();
+  }
 
   /// Aktywności z dni [from, to] włącznie.
   static Future<List<Activity>> activities(DateTime from, DateTime to) async {
@@ -139,13 +160,17 @@ class Db {
 
   // ---------- zatwierdzone dni ----------
 
-  static Future<void> setDayComplete(DateTime day, bool complete) => complete
-      ? _db.insert('day_status', {'day': dayKey(day), 'complete': 1}, conflictAlgorithm: ConflictAlgorithm.replace)
-      : _db.delete('day_status', where: 'day = ?', whereArgs: [dayKey(day)]);
+  static Future<void> setDayComplete(DateTime day, bool complete) async {
+    complete
+        ? await _db.insert('day_status', {'day': dayKey(day), 'complete': 1},
+            conflictAlgorithm: ConflictAlgorithm.replace)
+        : await _db.delete('day_status', where: 'day = ?', whereArgs: [dayKey(day)]);
+    _changed();
+  }
 
   static Future<Set<DateTime>> completeDays(DateTime from, DateTime to) async {
-    final rows = await _db.query('day_status',
-        where: 'day >= ? AND day <= ? AND complete = 1', whereArgs: [dayKey(from), dayKey(to)]);
+    final rows = await _db
+        .query('day_status', where: 'day >= ? AND day <= ? AND complete = 1', whereArgs: [dayKey(from), dayKey(to)]);
     return {for (final r in rows) DateTime.parse(r['day'] as String)};
   }
 
@@ -182,6 +207,7 @@ class Db {
   /// Granice dnia: baza z [e] + aktywności z tego dnia − deficyt celu.
   static Future<DayBudget> budget(DateTime day, EnergyEstimate e) async {
     final kcal = (await activities(day, day)).fold(0.0, (s, a) => s + a.kcal);
-    return dayBudget(e, kcal, rateKgWeek: prefs.rateKgWeek, goalWeight: prefs.goalWeight, kcalOverride: prefs.overrides['kcal']);
+    return dayBudget(e, kcal,
+        rateKgWeek: prefs.rateKgWeek, goalWeight: prefs.goalWeight, kcalOverride: prefs.overrides['kcal']);
   }
 }
