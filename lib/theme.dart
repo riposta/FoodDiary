@@ -29,7 +29,8 @@ final appTheme = ThemeData(
   floatingActionButtonTheme: const FloatingActionButtonThemeData(backgroundColor: rose, foregroundColor: ink),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
-    fillColor: Colors.white,
+    fillColor: const Color(0xFFF6F1FA), // widoczne i na kremowym tle, i na białych kartach
+    hintStyle: const TextStyle(color: Colors.black38),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
   ),
 );

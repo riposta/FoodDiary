@@ -76,7 +76,7 @@ lib/
   models.dart        // Entry, Norms, Profile
   db.dart            // sqflite CRUD + agregacje
   ai.dart            // klient OpenRouter + parser
-  norms.dart         // Mifflin + domyślne normy
+  prefs.dart         // profil, normy (Mifflin), ustawienia API
   screens/today.dart, entry_edit.dart, stats.dart, report.dart, settings.dart
   pdf_report.dart    // budowa PDF
   backup.dart        // eksport/import ZIP
@@ -87,7 +87,7 @@ test/
 ## 10. Plan implementacji
 1. `flutter create --org pl.fooddiary --platforms android food_diary`, pakiety, motyw pastelowy, szkielet nawigacji.
 2. `models.dart` + `db.dart` (schemat, CRUD, sumy dzienne i z zakresu).
-3. `norms.dart` + ekran Ustawień (profil, normy, API, secure storage) oraz test norm.
+3. `prefs.dart` + ekran Ustawień (profil, normy, API, secure storage) oraz test norm.
 4. `ai.dart` (request, parser) i jego test, plus „Testuj połączenie”.
 5. Ekran Dodaj/edytuj (image_picker, analiza, formularz, zapis zdjęcia do katalogu aplikacji).
 6. Ekran Dziś (podsumowanie, lista, nawigacja po dniach, usuwanie).
