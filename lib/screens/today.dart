@@ -48,8 +48,11 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   Future<void> _openActivity([Activity? a]) async {
-    final saved =
-        await showActivitySheet(context, activity: a, day: _day, weightKg: _energy?.weight ?? prefs.profile.weight);
+    final saved = await showActivitySheet(context,
+        activity: a,
+        day: _day,
+        weightKg: _energy?.weight ?? prefs.profile.weight,
+        bmr: _energy?.bmr ?? mifflin(prefs.profile));
     await _load();
     if (saved != null && mounted && _budget != null) {
       final type = activityType(saved.type).label;
@@ -201,7 +204,7 @@ class _ActivitySection extends StatelessWidget {
                         Text(activityType(a.type).label, style: t.titleSmall),
                         Text(
                           '${DateFormat('HH:mm').format(a.startedAt)}, ${a.minutes} min, ${a.intensity.label.toLowerCase()}'
-                          '${a.kcalSource == 'met' ? '' : ', z zegarka'}',
+                          '${a.kcalSource == 'met' ? '' : ', kcal z urządzenia'}',
                           style: t.bodySmall,
                         ),
                       ]),
