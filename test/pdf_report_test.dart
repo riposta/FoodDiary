@@ -35,7 +35,14 @@ void main() {
       e(1, 16, 'Kawa z mlekiem', 45, MealType.drink),
       e(3, 19, 'Łosoś z ziemniakami i sałatką', 610, MealType.dinner),
     ];
-    final pdf = await buildReport(DateTime(2026, 10, 1), DateTime(2026, 10, 3), entries, defaultNorms(Profile()));
+    final pdf = await buildReport(
+      DateTime(2026, 10, 1),
+      DateTime(2026, 10, 3),
+      entries,
+      (d) => defaultNorms(Profile(), kcal: d.day == 1 ? 2600 : 2000),
+      activities: [Activity(startedAt: DateTime(2026, 10, 1, 18), type: 'run', minutes: 61, kcal: 838)],
+      weights: [WeightEntry(day: DateTime(2026, 10, 1), kg: 93.4), WeightEntry(day: DateTime(2026, 10, 3), kg: 92.9)],
+    );
     expect(String.fromCharCodes(pdf.take(4)), '%PDF');
     final out = Platform.environment['PDF_OUT'];
     if (out != null) File(out).writeAsBytesSync(pdf);

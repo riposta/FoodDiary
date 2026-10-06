@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
 import '../db.dart';
+import '../energy.dart';
 import '../models.dart';
 import '../pdf_report.dart';
 import '../prefs.dart';
@@ -50,8 +51,22 @@ class _ReportScreenState extends State<ReportScreen> {
   Future<void> _run(Future<void> Function(Uint8List pdf) action) async {
     setState(() => _busy = true);
     try {
-      final entries = await Db.range(_range.start, _range.end);
-      final pdf = await buildReport(_range.start, _range.end, entries, prefs.norms);
+      final from = _range.start, to = _range.end;
+      final entries = await Db.range(from, to);
+      final activities = await Db.activities(from, to);
+      final energy = await Db.estimate();
+      final actKcal = <DateTime, double>{};
+      for (final a in activities) {
+        actKcal.update(dayOf(a.startedAt), (v) => v + a.kcal, ifAbsent: () => a.kcal);
+      }
+      Values normsFor(DateTime d) => dayNorms(
+            prefs.profile,
+            prefs.overrides,
+            dayBudget(energy, actKcal[d] ?? 0,
+                    rateKgWeek: prefs.rateKgWeek, goalWeight: prefs.goalWeight, kcalOverride: prefs.overrides['kcal'])
+                .goal,
+          );
+      final pdf = await buildReport(from, to, entries, normsFor, activities: activities, weights: await Db.weights());
       await action(pdf);
     } catch (e) {
       _snack('Nie udało się przygotować PDF: ${e is PlatformException ? e.message : e}');
