@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import 'db.dart';
 import 'models.dart';
@@ -158,4 +159,17 @@ Future<Uint8List> buildReport(DateTime from, DateTime to, List<Entry> entries, V
     ],
   ));
   return doc.save();
+}
+
+/// Systemowe okno druku. Część urządzeń go nie ma (np. BlueStacks, niektóre nakładki producentów):
+/// wtedy Android rzuca ActivityNotFoundException, a my udostępniamy PDF, żeby dało się go wydrukować
+/// z innej aplikacji albo wysłać. Zwraca false, gdy użyto udostępniania.
+Future<bool> printOrShare(Uint8List pdf, String name) async {
+  try {
+    await Printing.layoutPdf(onLayout: (_) async => pdf, name: name);
+    return true;
+  } on PlatformException {
+    await Printing.sharePdf(bytes: pdf, filename: name);
+    return false;
+  }
 }

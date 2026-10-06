@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
@@ -41,6 +40,10 @@ class _ReportScreenState extends State<ReportScreen> {
 
   int get _rangeDays => DateUtils.dateOnly(_range.end).difference(DateUtils.dateOnly(_range.start)).inHours ~/ 24 + 1;
 
+  void _snack(String msg) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   String get _fileName =>
       'dzienniczek_${DateFormat('yyyy-MM-dd').format(_range.start)}_${DateFormat('yyyy-MM-dd').format(_range.end)}.pdf';
 
@@ -51,7 +54,7 @@ class _ReportScreenState extends State<ReportScreen> {
       final pdf = await buildReport(_range.start, _range.end, entries, prefs.norms);
       await action(pdf);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nie udało się wygenerować PDF: $e')));
+      _snack('Nie udało się przygotować PDF: ${e is PlatformException ? e.message : e}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -120,7 +123,14 @@ class _ReportScreenState extends State<ReportScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             FilledButton.icon(
-              onPressed: _busy ? null : () => _run((pdf) => Printing.layoutPdf(onLayout: (_) async => pdf, name: _fileName)),
+              onPressed: _busy
+                  ? null
+                  : () => _run((pdf) async {
+                        if (!await printOrShare(pdf, _fileName)) {
+                          _snack('To urządzenie nie ma usługi drukowania, więc otwieram udostępnianie. '
+                              'Wybierz aplikację, z której wydrukujesz PDF, albo wyślij go mailem.');
+                        }
+                      }),
               icon: _busy
                   ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.print_outlined),
