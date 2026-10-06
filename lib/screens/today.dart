@@ -8,6 +8,7 @@ import '../prefs.dart';
 import '../theme.dart';
 import 'activity_edit.dart';
 import 'entry_edit.dart';
+import 'weight.dart';
 
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
@@ -62,6 +63,47 @@ class _TodayScreenState extends State<TodayScreen> {
     }
   }
 
+  /// Jedno wejście do dodawania: posiłek, aktywność, waga.
+  Future<void> _showAddSheet() async {
+    final kind = await showModalBottomSheet<AddKind>(
+      context: context,
+      backgroundColor: porcelain,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+              child: Text('Dodaj', style: Theme.of(c).textTheme.titleLarge),
+            ),
+            for (final (k, title, subtitle) in [
+              (AddKind.meal, 'Posiłek lub napój', 'Zdjęcie, etykieta albo opis'),
+              (AddKind.activity, 'Aktywność', 'Ręcznie albo ze zrzutu z aplikacji, zegarka, maszyny'),
+              (AddKind.weight, 'Waga', 'Najlepiej rano, przed śniadaniem'),
+            ])
+              EmptyCard(
+                      kind: k,
+                      title: title,
+                      subtitle: subtitle,
+                      onTap: () => Navigator.pop(c, k),
+                      margin: EdgeInsets.zero)
+                  .withSpacing(),
+          ]),
+        ),
+      ),
+    );
+    if (!mounted || kind == null) return;
+    switch (kind) {
+      case AddKind.meal:
+        await _open();
+      case AddKind.activity:
+        await _openActivity();
+      case AddKind.weight:
+        if (await addWeight(context)) await _load();
+    }
+  }
+
   Future<void> _setComplete(bool v) async {
     await Db.setDayComplete(_day, v);
     await _load();
@@ -102,9 +144,9 @@ class _TodayScreenState extends State<TodayScreen> {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _open(),
-        icon: const Icon(Icons.add_a_photo_outlined),
-        label: const Text('Dodaj posiłek'),
+        onPressed: _showAddSheet,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Dodaj'),
       ),
       body: RefreshIndicator(
         onRefresh: _load,
@@ -132,11 +174,19 @@ class _TodayScreenState extends State<TodayScreen> {
               budget: _budget,
               onTap: _budget == null ? null : () => showBudgetSheet(context, _budget!, _energy!),
             ),
-            _ActivitySection(acts: _acts, onAdd: () => _openActivity(), onOpen: _openActivity),
-            if (_entries.isEmpty) const _EmptyDay(),
+            if (_entries.isEmpty) ...[
+              const SectionHeader('Posiłki'),
+              EmptyCard(
+                kind: AddKind.meal,
+                title: 'Brak posiłków',
+                subtitle: 'Zrób zdjęcie albo opisz posiłek, a AI policzy kalorie',
+                onTap: () => _open(),
+              ),
+            ],
             for (final m in MealType.values)
               if (groups[m] != null)
                 _MealGroup(meal: m, entries: groups[m]!, onOpen: (e) => _open(entry: e), onDeleted: _load),
+            _ActivitySection(acts: _acts, onAdd: () => _openActivity(), onOpen: _openActivity),
             _CompleteDay(complete: _complete, onChanged: _setComplete),
           ],
         ),
@@ -156,60 +206,45 @@ class _ActivitySection extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final total = acts.fold(0.0, (s, a) => s + a.kcal);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(24, 16, 12, 4),
-        child: Row(children: [
-          Text('Aktywność', style: t.titleSmall),
-          if (acts.isNotEmpty) ...[const SizedBox(width: 8), Text('+${fmtNum(total)} kcal', style: t.bodySmall)],
-          const Spacer(),
-          TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Dodaj')),
-        ]),
-      ),
+      SectionHeader('Aktywność', trailing: acts.isEmpty ? null : '+${fmtNum(total)} kcal'),
       if (acts.isEmpty)
-        Card(
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onAdd,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(children: [
-                const Icon(Icons.directions_run_rounded, color: inkMuted),
-                const SizedBox(width: 14),
-                Expanded(child: Text('Trening podniesie dzisiejszy limit kalorii', style: t.bodySmall)),
-              ]),
-            ),
-          ),
+        EmptyCard(
+          kind: AddKind.activity,
+          title: 'Brak aktywności',
+          subtitle: 'Trening podniesie dzisiejszy limit kalorii',
+          onTap: onAdd,
         )
       else
         Card(
           clipBehavior: Clip.antiAlias,
           child: Column(children: [
             for (final (i, a) in acts.indexed) ...[
-              if (i > 0) const Divider(indent: 64),
+              if (i > 0) const Divider(indent: 76),
               InkWell(
                 onTap: () => onOpen(a),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
                   child: Row(children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration:
-                          BoxDecoration(color: const Color(0xFFE9F3EF), borderRadius: BorderRadius.circular(10)),
-                      child: Icon(activityType(a.type).icon, size: 20, color: const Color(0xFF5E9C86)),
-                    ),
+                    KindIcon(AddKind.activity, icon: activityType(a.type).icon),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(activityType(a.type).label, style: t.titleSmall),
+                        const SizedBox(height: 2),
                         Text(
                           '${DateFormat('HH:mm').format(a.startedAt)}, ${a.minutes} min, ${a.intensity.label.toLowerCase()}'
                           '${a.kcalSource == 'met' ? '' : ', kcal z urządzenia'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: t.bodySmall,
                         ),
                       ]),
                     ),
-                    Text('+${fmtNum(a.kcal)} kcal', style: t.titleSmall?.copyWith(color: const Color(0xFF4F8B76))),
+                    const SizedBox(width: 12),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text('+${fmtNum(a.kcal)}', style: t.titleMedium?.copyWith(color: AddKind.activity.fg)),
+                      Text('kcal', style: t.labelSmall),
+                    ]),
                   ]),
                 ),
               ),
@@ -217,6 +252,93 @@ class _ActivitySection extends StatelessWidget {
           ]),
         ),
     ]);
+  }
+}
+
+/// Rodzaje wpisów: jeden kolor i ikona na rodzaj, używane w arkuszu „Dodaj”, pustych stanach i wierszach.
+enum AddKind {
+  meal(Icons.restaurant_rounded, Color(0xFFF7ECE8), Color(0xFFB07F70)),
+  activity(Icons.directions_run_rounded, Color(0xFFE9F3EF), Color(0xFF4F8B76)),
+  weight(Icons.monitor_weight_outlined, heatherSoft, heather);
+
+  const AddKind(this.icon, this.bg, this.fg);
+  final IconData icon;
+  final Color bg;
+  final Color fg;
+}
+
+class KindIcon extends StatelessWidget {
+  const KindIcon(this.kind, {super.key, this.icon});
+  final AddKind kind;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(color: kind.bg, borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon ?? kind.icon, size: 22, color: kind.fg),
+      );
+}
+
+/// Nagłówek sekcji: nazwa po lewej, podsumowanie po prawej. Ten sam dla posiłków i aktywności.
+class SectionHeader extends StatelessWidget {
+  const SectionHeader(this.title, {super.key, this.trailing});
+  final String title;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      child: Row(children: [
+        Text(title, style: t.titleSmall),
+        const Spacer(),
+        if (trailing != null) Text(trailing!, style: t.bodySmall),
+      ]),
+    );
+  }
+}
+
+/// Karta-zaproszenie: pusty stan sekcji i pozycja w arkuszu „Dodaj”.
+class EmptyCard extends StatelessWidget {
+  const EmptyCard(
+      {super.key, required this.kind, required this.title, required this.subtitle, required this.onTap, this.margin});
+  final AddKind kind;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final EdgeInsets? margin;
+
+  Widget withSpacing() => Padding(padding: const EdgeInsets.only(bottom: 8), child: this);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Card(
+      margin: margin,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(children: [
+            KindIcon(kind),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: t.titleSmall),
+                const SizedBox(height: 2),
+                Text(subtitle, style: t.bodySmall),
+              ]),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.add_rounded, color: kind.fg),
+          ]),
+        ),
+      ),
+    );
   }
 }
 
@@ -294,31 +416,6 @@ void showBudgetSheet(BuildContext context, DayBudget b, EnergyEstimate e) {
   );
 }
 
-class _EmptyDay extends StatelessWidget {
-  const _EmptyDay();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(40, 40, 40, 0),
-      child: Column(children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: const BoxDecoration(color: heatherSoft, shape: BoxShape.circle),
-          child: const Icon(Icons.restaurant_rounded, color: heather, size: 28),
-        ),
-        const SizedBox(height: 16),
-        Text('Brak wpisów w tym dniu', style: t.titleMedium),
-        const SizedBox(height: 6),
-        Text('Zrób zdjęcie posiłku albo go opisz, a AI policzy kalorie i składniki.',
-            textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: inkMuted)),
-      ]),
-    );
-  }
-}
-
 class _MealGroup extends StatelessWidget {
   const _MealGroup({required this.meal, required this.entries, required this.onOpen, required this.onDeleted});
   final MealType meal;
@@ -331,14 +428,7 @@ class _MealGroup extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final kcal = sumValues(entries.map((e) => e.values))['kcal']!;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-        child: Row(children: [
-          Text(meal.label, style: t.titleSmall),
-          const Spacer(),
-          Text('${fmtNum(kcal)} kcal', style: t.bodySmall),
-        ]),
-      ),
+      SectionHeader(meal.label, trailing: '${fmtNum(kcal)} kcal'),
       Card(
         clipBehavior: Clip.antiAlias,
         child: Column(children: [

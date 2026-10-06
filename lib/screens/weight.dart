@@ -36,26 +36,7 @@ class _WeightScreenState extends State<WeightScreen> {
   }
 
   Future<void> _add() async {
-    final last = _weights.lastOrNull;
-    final r = await showDialog<WeightEntry>(context: context, builder: (_) => _WeightDialog(initialKg: last?.kg));
-    if (r == null) return;
-    final before = weightTrend(withoutOutliers([for (final w in _weights) (day: w.day, kg: w.kg)])).lastOrNull?.kg;
-    await Db.saveWeight(r);
-    final all = await Db.weights();
-    final after = weightTrend(withoutOutliers([for (final w in all) (day: w.day, kg: w.kg)])).last.kg;
-    final m =
-        before == null ? null : milestone(start: all.first.kg, before: before, after: after, goal: prefs.goalWeight);
-    if (m != null) {
-      await Notifications.show(
-          NotifKind.milestone, m, 'Trend wagi: ${fmtExact(double.parse(after.toStringAsFixed(1)))} kg',
-          payload: 'weight');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-    }
-    if (_weights.every((w) => !w.day.isAfter(r.day))) {
-      prefs.profile.weight = r.kg; // profil śledzi ostatnie ważenie (wzór, gdy brak trendu)
-      await prefs.save();
-    }
-    await _load();
+    if (await addWeight(context)) await _load();
   }
 
   Future<void> _delete(WeightEntry w) async {
@@ -85,7 +66,7 @@ class _WeightScreenState extends State<WeightScreen> {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _add,
-        icon: const Icon(Icons.monitor_weight_outlined),
+        icon: const Icon(Icons.add_rounded),
         label: const Text('Dodaj wagę'),
       ),
       body: RefreshIndicator(
@@ -440,6 +421,32 @@ class _WeightScreenState extends State<WeightScreen> {
           ]),
         ),
       ];
+}
+
+/// Okno ważenia + zapis + kamień milowy. Wspólne dla ekranów „Waga” i „Dziś”. Zwraca true po zapisie.
+Future<bool> addWeight(BuildContext context) async {
+  final weights = await Db.weights();
+  if (!context.mounted) return false;
+  final r =
+      await showDialog<WeightEntry>(context: context, builder: (_) => _WeightDialog(initialKg: weights.lastOrNull?.kg));
+  if (r == null) return false;
+  final before = weightTrend(withoutOutliers([for (final w in weights) (day: w.day, kg: w.kg)])).lastOrNull?.kg;
+  await Db.saveWeight(r);
+  final all = await Db.weights();
+  final after = weightTrend(withoutOutliers([for (final w in all) (day: w.day, kg: w.kg)])).last.kg;
+  final m =
+      before == null ? null : milestone(start: all.first.kg, before: before, after: after, goal: prefs.goalWeight);
+  if (m != null) {
+    await Notifications.show(
+        NotifKind.milestone, m, 'Trend wagi: ${fmtExact(double.parse(after.toStringAsFixed(1)))} kg',
+        payload: 'weight');
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+  if (weights.every((w) => !w.day.isAfter(r.day))) {
+    prefs.profile.weight = r.kg; // profil śledzi ostatnie ważenie (wzór, gdy brak trendu)
+    await prefs.save();
+  }
+  return true;
 }
 
 class _WeightDialog extends StatefulWidget {
