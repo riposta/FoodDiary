@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai.dart';
 import '../models.dart';
 import '../prefs.dart';
 import '../theme.dart';
@@ -14,6 +15,19 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _p = prefs;
   bool _obscureKey = true;
+  bool _testing = false;
+
+  Future<void> _test() async {
+    setState(() => _testing = true);
+    try {
+      final e = await analyze(description: 'szklanka soku pomarańczowego 250 ml', eatenAt: DateTime.now());
+      _snack('Działa ✓ ${e.name}: ${fmtNum(e.values['kcal']!)} kcal');
+    } on AiException catch (e) {
+      _snack(e.message);
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -128,6 +142,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             initialValue: _p.model,
             decoration: const InputDecoration(labelText: 'Model (musi obsługiwać obraz)'),
             onChanged: (s) => _p.model = s.trim(),
+          ),
+          OutlinedButton.icon(
+            onPressed: _testing ? null : _test,
+            icon: _testing
+                ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.wifi_tethering),
+            label: const Text('Testuj połączenie'),
           ),
         ]),
         Padding(
