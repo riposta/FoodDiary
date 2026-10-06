@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ai.dart';
+import '../backup.dart';
 import '../models.dart';
 import '../prefs.dart';
 import '../theme.dart';
@@ -35,7 +36,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  Future<void> _export() async {
+    try {
+      await exportBackup();
+    } catch (e) {
+      _snack('Eksport nieudany: $e');
+    }
+  }
+
+  Future<void> _import() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Przywrócić kopię?'),
+        content: const Text('Wszystkie obecne wpisy i zdjęcia zostaną zastąpione zawartością kopii zapasowej.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Anuluj')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Przywróć')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      if (await importBackup()) _snack('Przywrócono kopię zapasową');
+    } catch (e) {
+      _snack('Import nieudany: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
+  }
+
+  void _snack(String msg) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 
   Future<void> _save() async {
     await _p.save();
@@ -155,6 +186,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: FilledButton.icon(onPressed: _save, icon: const Icon(Icons.check), label: const Text('Zapisz ustawienia')),
         ),
+        _section('Kopia zapasowa', [
+          const Text('Plik ZIP z wpisami i zdjęciami. Zapisz go np. na Dysku Google lub wyślij sobie mailem.',
+              style: TextStyle(color: Colors.black54)),
+          Row(children: [
+            Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.upload), label: const Text('Eksportuj'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(onPressed: _import, icon: const Icon(Icons.download), label: const Text('Importuj'))),
+          ]),
+        ]),
       ],
     );
   }
