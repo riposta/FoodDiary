@@ -27,22 +27,23 @@ enum MealType {
 }
 
 class Nutrient {
-  const Nutrient(this.key, this.label, this.unit, this.color);
+  const Nutrient(this.key, this.label, this.unit, this.color, {this.limit = true});
   final String key;
   final String label;
   final String unit;
   final Color color;
+  final bool limit; // przekroczenie normy = źle (dla białka i błonnika nie)
 }
 
 /// Kolejność = kolejność w UI, PDF, bazie i JSON od AI.
 const nutrients = [
   Nutrient('kcal', 'Kalorie', 'kcal', rose),
-  Nutrient('protein', 'Białko', 'g', lavender),
+  Nutrient('protein', 'Białko', 'g', lavender, limit: false),
   Nutrient('fat', 'Tłuszcze', 'g', peach),
   Nutrient('sat_fat', 'w tym nasycone', 'g', peach),
   Nutrient('carbs', 'Węglowodany', 'g', sky),
   Nutrient('sugars', 'w tym cukry', 'g', sky),
-  Nutrient('fiber', 'Błonnik', 'g', mint),
+  Nutrient('fiber', 'Błonnik', 'g', mint, limit: false),
   Nutrient('salt', 'Sól', 'g', mint),
 ];
 
