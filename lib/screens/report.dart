@@ -20,13 +20,26 @@ class ReportScreen extends StatefulWidget {
 class _ReportScreenState extends State<ReportScreen> {
   late DateTimeRange _range;
   bool _busy = false;
+  (int entries, int days)? _count;
 
   @override
   void initState() {
     super.initState();
-    final t = dayOf(DateTime.now());
-    _range = DateTimeRange(start: DateTime(t.year, t.month, t.day - 6), end: t);
+    _setLast(7);
   }
+
+  void _setLast(int days) {
+    final t = dayOf(DateTime.now());
+    _setRange(DateTimeRange(start: DateTime(t.year, t.month, t.day - days + 1), end: t));
+  }
+
+  Future<void> _setRange(DateTimeRange r) async {
+    setState(() => (_range = r, _count = null));
+    final e = await Db.range(r.start, r.end);
+    if (mounted && _range == r) setState(() => _count = (e.length, byDay(e).length));
+  }
+
+  int get _rangeDays => DateUtils.dateOnly(_range.end).difference(DateUtils.dateOnly(_range.start)).inHours ~/ 24 + 1;
 
   String get _fileName =>
       'dzienniczek_${DateFormat('yyyy-MM-dd').format(_range.start)}_${DateFormat('yyyy-MM-dd').format(_range.end)}.pdf';
@@ -46,66 +59,85 @@ class _ReportScreenState extends State<ReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final f = DateFormat('d MMMM y');
+    final t = Theme.of(context).textTheme;
+    final f = DateFormat('d MMM y');
+    final c = _count;
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
-          child: Text('Dzienniczek PDF', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: ink)),
-        ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: Text('Rozpiska posiłków dzień po dniu ze zdjęciami, sumami i % normy — do wydruku lub wysłania dietetyczce.',
-              style: TextStyle(color: Colors.black54)),
-        ),
+        const PageHeader('Dzienniczek', subtitle: 'Rozpiska posiłków dzień po dniu dla dietetyczki'),
         Card(
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            leading: const Icon(Icons.date_range),
-            title: const Text('Okres'),
-            subtitle: Text('${f.format(_range.start)} – ${f.format(_range.end)}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ink)),
-            trailing: const Icon(Icons.edit_calendar),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
             onTap: () async {
               final r = await showDateRangePicker(
                   context: context, firstDate: DateTime(2020), lastDate: DateTime.now(), initialDateRange: _range);
-              if (r != null) setState(() => _range = r);
+              if (r != null) _setRange(r);
             },
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(color: heatherSoft, borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.date_range_outlined, color: heather),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${f.format(_range.start)} – ${f.format(_range.end)}', style: t.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      c == null
+                          ? 'Liczenie wpisów…'
+                          : c.$1 == 0
+                              ? 'Brak wpisów w tym okresie'
+                              : '${c.$1} ${plural(c.$1, 'wpis', 'wpisy', 'wpisów')} w ${c.$2} z $_rangeDays dni',
+                      style: t.bodySmall,
+                    ),
+                  ]),
+                ),
+                const Icon(Icons.edit_outlined, size: 18, color: inkMuted),
+              ]),
+            ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: Wrap(spacing: 8, children: [
-            for (final (label, days) in [('Ostatnie 7 dni', 7), ('Ostatnie 14 dni', 14), ('Ostatnie 30 dni', 30)])
-              ActionChip(
-                label: Text(label),
-                backgroundColor: lavender.withOpacity(.4),
-                onPressed: () {
-                  final t = dayOf(DateTime.now());
-                  setState(() => _range = DateTimeRange(start: DateTime(t.year, t.month, t.day - days + 1), end: t));
-                },
+            for (final days in [7, 14, 30])
+              ChoiceChip(
+                label: Text('$days dni'),
+                selected: _rangeDays == days && DateUtils.isSameDay(_range.end, DateTime.now()),
+                selectedColor: heatherSoft,
+                showCheckmark: false,
+                onSelected: (_) => _setLast(days),
               ),
           ]),
         ),
-        const SizedBox(height: 8),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             FilledButton.icon(
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               onPressed: _busy ? null : () => _run((pdf) => Printing.layoutPdf(onLayout: (_) async => pdf, name: _fileName)),
               icon: _busy
                   ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.print),
-              label: const Text('Generuj i drukuj'),
+                  : const Icon(Icons.print_outlined),
+              label: const Text('Drukuj dzienniczek'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               onPressed: _busy ? null : () => _run((pdf) => Printing.sharePdf(bytes: pdf, filename: _fileName)),
-              icon: const Icon(Icons.share),
-              label: const Text('Udostępnij PDF (e-mail, komunikator…)'),
+              icon: const Icon(Icons.ios_share_rounded),
+              label: const Text('Wyślij PDF'),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'PDF zawiera każdy dzień z godzinami i zdjęciami posiłków, sumy dzienne, % normy oraz średnie z całego okresu.',
+              style: t.bodySmall,
+              textAlign: TextAlign.center,
             ),
           ]),
         ),

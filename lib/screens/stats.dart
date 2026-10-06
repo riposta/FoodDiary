@@ -61,10 +61,7 @@ class _StatsScreenState extends State<StatsScreen> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Text('Statystyki', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: ink)),
-        ),
+        const PageHeader('Statystyki'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: SegmentedButton<bool>(
@@ -76,25 +73,30 @@ class _StatsScreenState extends State<StatsScreen> {
             },
           ),
         ),
-        Row(children: [
-          IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _shift(-1)),
-          Expanded(child: Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
-          IconButton(icon: const Icon(Icons.chevron_right), onPressed: canNext ? () => _shift(1) : null),
-        ]),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 12, 4),
+          child: Row(children: [
+            Expanded(child: Text(label, style: Theme.of(context).textTheme.titleMedium)),
+            IconButton(tooltip: 'Wcześniej', icon: const Icon(Icons.chevron_left_rounded), onPressed: () => _shift(-1)),
+            IconButton(
+                tooltip: 'Później', icon: const Icon(Icons.chevron_right_rounded), onPressed: canNext ? () => _shift(1) : null),
+          ]),
+        ),
         Card(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(12, 18, 16, 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Padding(
-                padding: EdgeInsets.only(left: 8, bottom: 12),
-                child: Text('Kalorie dziennie', style: TextStyle(fontWeight: FontWeight.w600, color: ink)),
+              Padding(
+                padding: const EdgeInsets.only(left: 8, bottom: 16),
+                child: Text('Kalorie dziennie', style: Theme.of(context).textTheme.titleSmall),
               ),
               SizedBox(height: 220, child: _chart(dates, kcal, norms['kcal']!)),
             ]),
           ),
         ),
         SummaryCard(
-          title: days.isEmpty ? 'Brak wpisów w tym okresie' : 'Średnio dziennie (dni z wpisami: ${days.length})',
+          title: days.isEmpty ? 'Brak wpisów w tym okresie' : 'Średnia z dni z wpisami (${days.length})',
+          average: true,
           total: dailyAverage(_entries),
           norms: norms,
         ),
@@ -112,7 +114,7 @@ class _StatsScreenState extends State<StatsScreen> {
             BarChartRodData(
               toY: kcal[i],
               width: _month ? 6 : 22,
-              color: const Color(0xFF8CCBB5),
+              color: lilac,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
             ),
           ]),
@@ -120,20 +122,20 @@ class _StatsScreenState extends State<StatsScreen> {
       extraLinesData: ExtraLinesData(horizontalLines: [
         HorizontalLine(
           y: norm,
-          color: const Color(0xFFC0566A),
-          strokeWidth: 1.5,
+          color: overBar,
+          strokeWidth: 1.2,
           dashArray: [6, 4],
           label: HorizontalLineLabel(
             show: true,
             alignment: Alignment.topRight,
-            style: const TextStyle(fontSize: 10, color: Color(0xFFC0566A)),
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: overText),
             labelResolver: (_) => 'norma ${fmtNum(norm)}',
           ),
         ),
       ]),
       gridData: FlGridData(
         drawVerticalLine: false,
-        getDrawingHorizontalLine: (_) => const FlLine(color: Color(0x14000000), strokeWidth: 1),
+        getDrawingHorizontalLine: (_) => const FlLine(color: track, strokeWidth: 1),
       ),
       borderData: FlBorderData(show: false),
       titlesData: FlTitlesData(
@@ -145,7 +147,7 @@ class _StatsScreenState extends State<StatsScreen> {
             reservedSize: 40,
             getTitlesWidget: (v, meta) => v == meta.max
                 ? const SizedBox()
-                : Text(fmtNum(v), style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                : Text(fmtNum(v), style: const TextStyle(fontSize: 10, color: inkMuted)),
           ),
         ),
         bottomTitles: AxisTitles(
@@ -157,7 +159,7 @@ class _StatsScreenState extends State<StatsScreen> {
               return Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(show ? (_month ? '${d.day}' : DateFormat('EEE').format(d)) : '',
-                    style: const TextStyle(fontSize: 10, color: Colors.black54)),
+                    style: const TextStyle(fontSize: 10, color: inkMuted)),
               );
             },
           ),

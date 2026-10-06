@@ -11,8 +11,8 @@ import 'db.dart';
 import 'models.dart';
 
 const _thumbPx = 240;
-const _headerBg = PdfColor.fromInt(0xFFE3F2EC); // mięta
-const _sumBg = PdfColor.fromInt(0xFFFFF1E6); // brzoskwinia
+const _headerBg = PdfColor.fromInt(0xFFEEEAF7); // wrzos
+const _sumBg = PdfColor.fromInt(0xFFF8F6FB);
 const _border = PdfColor.fromInt(0xFFDDDDDD);
 
 /// Miniatury JPEG w tle, żeby nie zamrozić UI przy wielu zdjęciach.
@@ -29,8 +29,8 @@ Future<Map<String, Uint8List>> _thumbs(List<String> paths) => Isolate.run(() {
     });
 
 Future<Uint8List> buildReport(DateTime from, DateTime to, List<Entry> entries, Values norms) async {
-  final base = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
-  final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+  final base = pw.Font.ttf(await rootBundle.load('assets/fonts/PlusJakartaSans-Regular.ttf'));
+  final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/PlusJakartaSans-Bold.ttf'));
   final thumbs = await _thumbs([for (final e in entries) if (e.photo != null) Db.photoFile(e.photo!).path]);
   final days = byDay(entries);
   final range = '${DateFormat('d MMMM y').format(from)} – ${DateFormat('d MMMM y').format(to)}';

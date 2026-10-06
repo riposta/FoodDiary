@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:intl/intl.dart';
+
 import 'theme.dart';
 
 enum MealType {
@@ -37,14 +39,14 @@ class Nutrient {
 
 /// Kolejność = kolejność w UI, PDF, bazie i JSON od AI.
 const nutrients = [
-  Nutrient('kcal', 'Kalorie', 'kcal', rose),
-  Nutrient('protein', 'Białko', 'g', lavender, limit: false),
-  Nutrient('fat', 'Tłuszcze', 'g', peach),
-  Nutrient('sat_fat', 'w tym nasycone', 'g', peach),
-  Nutrient('carbs', 'Węglowodany', 'g', sky),
-  Nutrient('sugars', 'w tym cukry', 'g', sky),
-  Nutrient('fiber', 'Błonnik', 'g', mint, limit: false),
-  Nutrient('salt', 'Sól', 'g', mint),
+  Nutrient('kcal', 'Kalorie', 'kcal', blush),
+  Nutrient('protein', 'Białko', 'g', lilac, limit: false),
+  Nutrient('fat', 'Tłuszcze', 'g', clay),
+  Nutrient('sat_fat', 'w tym nasycone', 'g', clay),
+  Nutrient('carbs', 'Węglowodany', 'g', powder),
+  Nutrient('sugars', 'w tym cukry', 'g', powder),
+  Nutrient('fiber', 'Błonnik', 'g', sage, limit: false),
+  Nutrient('salt', 'Sól', 'g', slate),
 ];
 
 typedef Values = Map<String, double>;
@@ -120,4 +122,17 @@ Values dailyAverage(Iterable<Entry> entries) {
   return total.map((k, v) => MapEntry(k, v / days.length));
 }
 
-String fmtNum(double v) => v >= 100 || v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+final _whole = NumberFormat('#,##0', 'pl_PL'), _oneDecimal = NumberFormat('0.#', 'pl_PL');
+
+/// Do wyświetlania: od 10 w górę liczby całkowite ("1 996"), poniżej jedno miejsce po przecinku ("2,5").
+String fmtNum(double v) => (v.abs() >= 10 ? _whole : _oneDecimal).format(v);
+
+/// Polska odmiana: plural(1,'wpis','wpisy','wpisów') -> wpis, 3 -> wpisy, 5 -> wpisów, 22 -> wpisy.
+String plural(int n, String one, String few, String many) {
+  if (n == 1) return one;
+  final d = n % 10, dd = n % 100;
+  return d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? few : many;
+}
+
+/// Do pól edycji: bez zaokrąglania do całości ("14,5").
+String fmtExact(double v) => _oneDecimal.format(v);

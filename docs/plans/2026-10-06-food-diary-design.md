@@ -8,7 +8,7 @@ Prywatna aplikacja na Androida do prowadzenia dzienniczka żywieniowego. Posiłe
 |---|---|
 | Technologia | Flutter (Dart), tylko Android, minSdk 24, Material 3 |
 | Dane | Lokalnie: SQLite (`sqflite`) + zdjęcia w katalogu aplikacji. Backup: eksport i import ZIP |
-| AI | `POST {baseUrl}/chat/completions`. Base URL, klucz i ID modelu (z obsługą obrazu) ustawiane w ustawieniach |
+| AI | `POST {baseUrl}/chat/completions`, domyślnie `deepseek/deepseek-v4.1-flash` z wyłączonym rozumowaniem. Base URL, klucz i model do zmiany w ustawieniach |
 | Wpis | Wymagane zdjęcie LUB opis. Zdjęcie z aparatu albo z galerii |
 | Przepływ | AI → podgląd z edycją → zapis. Edycja i ponowna analiza możliwe później |
 | Składniki | kcal, białko, tłuszcze, w tym nasycone, węglowodany, w tym cukry, błonnik, sól |

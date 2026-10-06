@@ -74,7 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _numField(String label, num value, String suffix, void Function(double) onChanged) => TextFormField(
-        initialValue: fmtNum(value.toDouble()),
+        initialValue: fmtExact(value.toDouble()),
         decoration: InputDecoration(labelText: label, suffixText: suffix),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         onChanged: (s) {
@@ -85,11 +85,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _section(String title, List<Widget> children) => Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
               ...children.expand((w) => [w, const SizedBox(height: 12)]),
             ],
@@ -104,10 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
-          child: Text('Ustawienia', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: ink)),
-        ),
+        const PageHeader('Ustawienia'),
         _section('Profil', [
           SegmentedButton<Sex>(
             segments: [for (final s in Sex.values) ButtonSegment(value: s, label: Text(s.label))],
@@ -122,7 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Expanded(child: _numField('Wzrost', pr.height, 'cm', (v) => pr.height = v)),
           ]),
           DropdownButtonFormField<double>(
-            value: activityLevels.containsKey(pr.activity) ? pr.activity : 1.375,
+            initialValue: activityLevels.containsKey(pr.activity) ? pr.activity : 1.375,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Aktywność'),
             items: [for (final e in activityLevels.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
@@ -131,11 +128,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ]),
         _section('Dzienne normy', [
           const Text('Puste pole = wyliczone z profilu. Wpisz wartość, aby nadpisać (np. zalecenie dietetyczki).',
-              style: TextStyle(color: Colors.black54)),
+              style: TextStyle(color: inkMuted)),
           for (final n in nutrients)
             TextFormField(
               key: ValueKey('norm_${n.key}'),
-              initialValue: _p.overrides[n.key] == null ? '' : fmtNum(_p.overrides[n.key]!),
+              initialValue: _p.overrides[n.key] == null ? '' : fmtExact(_p.overrides[n.key]!),
               decoration: InputDecoration(
                 labelText: n.label,
                 hintText: 'auto: ${fmtNum(auto[n.key]!)}',
@@ -188,7 +185,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _section('Kopia zapasowa', [
           const Text('Plik ZIP z wpisami i zdjęciami. Zapisz go np. na Dysku Google lub wyślij sobie mailem.',
-              style: TextStyle(color: Colors.black54)),
+              style: TextStyle(color: inkMuted)),
           Row(children: [
             Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.upload), label: const Text('Eksportuj'))),
             const SizedBox(width: 8),

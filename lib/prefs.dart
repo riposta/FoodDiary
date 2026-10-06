@@ -47,7 +47,10 @@ Values defaultNorms(Profile p) {
 double? parseNum(String s) => double.tryParse(s.trim().replaceAll(',', '.'));
 
 const defaultBaseUrl = 'https://openrouter.ai/api/v1';
-const defaultModel = 'google/gemini-3.8-flash';
+const defaultModel = 'deepseek/deepseek-v4.1-flash';
+
+/// Klucz wkompilowany przy buildzie (`--dart-define-from-file=secrets.json`); ten z Ustawień ma pierwszeństwo.
+const _builtInKey = String.fromEnvironment('OPENROUTER_API_KEY');
 
 late Prefs prefs;
 
@@ -60,7 +63,7 @@ class Prefs {
 
   Values get norms => {...defaultNorms(profile), ...overrides};
 
-  static const _secure = FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
+  static const _secure = FlutterSecureStorage(); // szyfrowane kluczem z Android Keystore
 
   static Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
@@ -79,6 +82,7 @@ class Prefs {
       ..baseUrl = sp.getString('base_url') ?? defaultBaseUrl
       ..model = sp.getString('model') ?? defaultModel
       ..apiKey = await _secure.read(key: 'api_key') ?? '';
+    if (prefs.apiKey.isEmpty) prefs.apiKey = _builtInKey;
   }
 
   Future<void> save() async {

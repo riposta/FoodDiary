@@ -144,19 +144,29 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
           const SizedBox(height: 12),
           ListTile(
             tileColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            leading: const Icon(Icons.schedule),
-            title: Text(DateFormat('EEEE, d MMMM y, HH:mm').format(_eatenAt)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: line)),
+            leading: const Icon(Icons.schedule_rounded, color: heather),
+            title: Text(DateFormat('EEEE, d MMMM, HH:mm').format(_eatenAt), style: Theme.of(context).textTheme.titleSmall),
+            trailing: const Icon(Icons.edit_outlined, size: 18, color: inkMuted),
             onTap: _pickDateTime,
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _busy ? null : _analyze,
-            icon: _busy
-                ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.auto_awesome),
-            label: Text(_draft == null ? 'Analizuj z AI' : 'Analizuj ponownie'),
-          ),
+          if (_draft == null)
+            FilledButton.icon(
+              onPressed: _busy ? null : _analyze,
+              icon: _busy
+                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.auto_awesome),
+              label: const Text('Analizuj z AI'),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _analyze,
+              icon: _busy
+                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.auto_awesome_outlined, color: heather),
+              label: const Text('Analizuj ponownie'),
+            ),
           if (_draft == null) TextButton(onPressed: _busy ? null : _manual, child: const Text('Wpisz ręcznie')),
           if (_draft != null) ..._form(_draft!, norms),
         ],
@@ -164,19 +174,32 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
     );
   }
 
+  static final _compact = FilledButton.styleFrom(minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 18));
+
   Widget _photoBox() {
     final buttons = Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      FilledButton.tonalIcon(onPressed: () => _pick(ImageSource.camera), icon: const Icon(Icons.photo_camera), label: const Text('Aparat')),
+      FilledButton.tonalIcon(
+          style: _compact,
+          onPressed: () => _pick(ImageSource.camera),
+          icon: const Icon(Icons.photo_camera_outlined),
+          label: const Text('Aparat')),
       const SizedBox(width: 12),
-      FilledButton.tonalIcon(onPressed: () => _pick(ImageSource.gallery), icon: const Icon(Icons.photo_library), label: const Text('Galeria')),
+      FilledButton.tonalIcon(
+          style: _compact,
+          onPressed: () => _pick(ImageSource.gallery),
+          icon: const Icon(Icons.photo_library_outlined),
+          label: const Text('Galeria')),
     ]);
     if (_photo == null) {
       return Container(
         height: 160,
-        decoration: BoxDecoration(color: mint.withOpacity(.35), borderRadius: BorderRadius.circular(24)),
+        decoration: BoxDecoration(
+            color: Colors.white, border: Border.all(color: line), borderRadius: BorderRadius.circular(20)),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.restaurant, size: 40, color: ink),
-          const SizedBox(height: 12),
+          Text('Dodaj zdjęcie posiłku', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text('albo pomiń i wpisz sam opis', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 16),
           buttons,
         ]),
       );
@@ -184,7 +207,7 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
     return Column(children: [
       Stack(children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           child: Image.file(_photo!, height: 240, width: double.infinity, fit: BoxFit.cover),
         ),
         Positioned(
@@ -207,8 +230,12 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(color: lavender.withOpacity(.4), borderRadius: BorderRadius.circular(16)),
-            child: Text('🤖 ${d.aiNotes}'),
+            decoration: BoxDecoration(color: heatherSoft, borderRadius: BorderRadius.circular(14)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.auto_awesome_outlined, size: 18, color: heather),
+              const SizedBox(width: 10),
+              Expanded(child: Text(d.aiNotes!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: ink))),
+            ]),
           ),
         TextFormField(
           key: ValueKey('name$_formVersion'),
@@ -231,7 +258,7 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
           Expanded(
             child: DropdownButtonFormField<MealType>(
               key: ValueKey('meal$_formVersion'),
-              value: d.mealType,
+              initialValue: d.mealType,
               decoration: const InputDecoration(labelText: 'Posiłek'),
               items: [for (final m in MealType.values) DropdownMenuItem(value: m, child: Text(m.label))],
               onChanged: (m) => d.mealType = m!,
@@ -249,7 +276,7 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
                   width: (c.maxWidth - 8) / 2,
                   child: TextFormField(
                     key: ValueKey('${n.key}$_formVersion'),
-                    initialValue: fmtNum(d.values[n.key]!),
+                    initialValue: fmtExact(d.values[n.key]!),
                     decoration: InputDecoration(
                       labelText: n.label,
                       suffixText: n.unit,
@@ -266,7 +293,6 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
         const SizedBox(height: 20),
         FilledButton.icon(
           onPressed: _busy ? null : _save,
-          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF5FA58F), minimumSize: const Size.fromHeight(52)),
           icon: const Icon(Icons.check),
           label: const Text('Zapisz'),
         ),

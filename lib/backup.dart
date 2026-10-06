@@ -22,13 +22,13 @@ Future<void> exportBackup() async {
   } finally {
     await Db.open();
   }
-  await Share.shareXFiles([XFile(zipPath)], subject: 'Kopia zapasowa dzienniczka');
+  await SharePlus.instance.share(ShareParams(files: [XFile(zipPath)], subject: 'Kopia zapasowa dzienniczka'));
 }
 
 /// Zwraca false, gdy użytkownik anulował wybór pliku.
 Future<bool> importBackup() async {
-  final picked = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip']);
-  final path = picked?.files.single.path;
+  final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['zip']);
+  final path = picked.firstOrNull?.path;
   if (path == null) return false;
 
   // Najpierw rozpakuj i sprawdź poza danymi aplikacji — uszkodzony plik niczego nie psuje.

@@ -93,6 +93,8 @@ Future<Entry> analyze({File? photo, String? description, required DateTime eaten
             'model': prefs.model,
             'temperature': 0.2,
             'response_format': {'type': 'json_object'},
+            // bez "myślenia" odpowiedź przychodzi w ~2 s zamiast ~25 s, przy podobnych wartościach
+            if (prefs.baseUrl.contains('openrouter.ai')) 'reasoning': {'enabled': false},
             'messages': [
               {'role': 'system', 'content': _system},
               {'role': 'user', 'content': content},
