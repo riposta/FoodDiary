@@ -9,6 +9,7 @@ import 'screens/report.dart';
 import 'screens/settings.dart';
 import 'screens/stats.dart';
 import 'screens/today.dart';
+import 'screens/weight.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -51,8 +52,9 @@ class _HomeShellState extends State<HomeShell> {
         body: SafeArea(
           child: switch (_tab) {
             0 => const TodayScreen(),
-            1 => const StatsScreen(),
-            2 => const ReportScreen(),
+            1 => const WeightScreen(),
+            2 => const StatsScreen(),
+            3 => const ReportScreen(),
             _ => const SettingsScreen(),
           },
         ),
@@ -61,6 +63,8 @@ class _HomeShellState extends State<HomeShell> {
           onDestinationSelected: (i) => setState(() => _tab = i),
           destinations: const [
             NavigationDestination(icon: Icon(Icons.restaurant_outlined), selectedIcon: Icon(Icons.restaurant), label: 'Dziś'),
+            NavigationDestination(
+                icon: Icon(Icons.monitor_weight_outlined), selectedIcon: Icon(Icons.monitor_weight), label: 'Waga'),
             NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Statystyki'),
             NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description), label: 'Raport'),
             NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Ustawienia'),
