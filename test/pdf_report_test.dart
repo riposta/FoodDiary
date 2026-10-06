@@ -1,0 +1,34 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:food_diary/models.dart';
+import 'package:food_diary/pdf_report.dart';
+import 'package:food_diary/prefs.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('PDF generuje się z polskimi znakami', () async {
+    Intl.defaultLocale = 'pl_PL';
+    await initializeDateFormatting('pl_PL');
+    Entry e(int d, int h, String name, double kcal, MealType m) => Entry(
+        eatenAt: DateTime(2026, 10, d, h, 15),
+        mealType: m,
+        name: name,
+        portion: 'ok. 300 g',
+        description: d == 1 && h == 8 ? 'z mlekiem 2%' : null,
+        values: {for (final n in nutrients) n.key: kcal / 20, 'kcal': kcal});
+    final entries = [
+      e(1, 8, 'Owsianka z bananem i orzechami', 420, MealType.breakfast),
+      e(1, 13, 'Żurek z jajkiem', 380, MealType.lunch),
+      e(1, 16, 'Kawa z mlekiem', 45, MealType.drink),
+      e(3, 19, 'Łosoś z ziemniakami i sałatką', 610, MealType.dinner),
+    ];
+    final pdf = await buildReport(DateTime(2026, 10, 1), DateTime(2026, 10, 3), entries, defaultNorms(Profile()));
+    expect(String.fromCharCodes(pdf.take(4)), '%PDF');
+    final out = Platform.environment['PDF_OUT'];
+    if (out != null) File(out).writeAsBytesSync(pdf);
+  });
+}
