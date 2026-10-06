@@ -4,6 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 
 import 'db.dart';
+import 'prefs.dart';
 import 'screens/report.dart';
 import 'screens/settings.dart';
 import 'screens/stats.dart';
@@ -15,6 +16,7 @@ Future<void> main() async {
   Intl.defaultLocale = 'pl_PL';
   await initializeDateFormatting('pl_PL');
   await Db.init();
+  await Prefs.load();
   runApp(const FoodDiaryApp());
 }
 
