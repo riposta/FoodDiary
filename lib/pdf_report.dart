@@ -43,7 +43,7 @@ Future<Uint8List> buildReport(DateTime from, DateTime to, List<Entry> entries, V
   const short = ['kcal', 'Białko', 'Tłuszcz', 'nasyc.', 'Węgl.', 'cukry', 'Błonnik', 'Sól']; // kolejność jak `nutrients`
   const cols = ['Godz.', '', 'Posiłek', ...short];
   final colWidths = {
-    0: const pw.FixedColumnWidth(28),
+    0: const pw.FixedColumnWidth(34),
     1: const pw.FixedColumnWidth(40),
     2: const pw.FlexColumnWidth(),
     for (var i = 3; i < cols.length; i++) i: const pw.FixedColumnWidth(38),

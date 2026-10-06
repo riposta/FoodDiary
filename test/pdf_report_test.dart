@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:food_diary/db.dart';
+import 'package:image/image.dart' as img;
 import 'package:food_diary/models.dart';
 import 'package:food_diary/pdf_report.dart';
 import 'package:food_diary/prefs.dart';
@@ -13,12 +15,19 @@ void main() {
   test('PDF generuje się z polskimi znakami', () async {
     Intl.defaultLocale = 'pl_PL';
     await initializeDateFormatting('pl_PL');
+    // zdjęcie posiłku: prawdziwe z PDF_PHOTO albo syntetyczne
+    Db.photosDir = Directory.systemTemp.createTempSync('photos').path;
+    final photo = Platform.environment['PDF_PHOTO'];
+    photo != null
+        ? File(photo).copySync(Db.photoFile('p.jpg').path)
+        : Db.photoFile('p.jpg').writeAsBytesSync(img.encodeJpg(img.Image(width: 800, height: 600)));
     Entry e(int d, int h, String name, double kcal, MealType m) => Entry(
         eatenAt: DateTime(2026, 10, d, h, 15),
         mealType: m,
         name: name,
         portion: 'ok. 300 g',
         description: d == 1 && h == 8 ? 'z mlekiem 2%' : null,
+        photo: h == 13 ? 'p.jpg' : null,
         values: {for (final n in nutrients) n.key: kcal / 20, 'kcal': kcal});
     final entries = [
       e(1, 8, 'Owsianka z bananem i orzechami', 420, MealType.breakfast),
