@@ -121,7 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           DropdownButtonFormField<double>(
             initialValue: activityLevels.containsKey(pr.activity) ? pr.activity : 1.375,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Aktywność'),
+            decoration: const InputDecoration(labelText: 'Na co dzień (bez treningów)'),
             items: [for (final e in activityLevels.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
             onChanged: (v) => setState(() => pr.activity = v!),
           ),

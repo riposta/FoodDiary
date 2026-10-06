@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:food_diary/energy.dart';
+import 'package:food_diary/models.dart';
 import 'package:food_diary/prefs.dart';
 
 DateTime d(int i) => DateTime(2026, 9, 1 + i);

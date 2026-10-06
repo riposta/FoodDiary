@@ -9,15 +9,6 @@ const kcalPerKg = 7700.0;
 
 // ---------- Aktywności ----------
 
-enum Intensity {
-  light('Lekka'),
-  moderate('Umiarkowana'),
-  vigorous('Intensywna');
-
-  const Intensity(this.label);
-  final String label;
-}
-
 class ActivityType {
   const ActivityType(this.key, this.label, this.icon, this.met);
   final String key;

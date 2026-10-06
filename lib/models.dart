@@ -136,3 +136,89 @@ String plural(int n, String one, String few, String many) {
 
 /// Do pól edycji: bez zaokrąglania do całości ("14,5").
 String fmtExact(double v) => _oneDecimal.format(v);
+
+enum Intensity {
+  light('Lekka'),
+  moderate('Umiarkowana'),
+  vigorous('Intensywna');
+
+  const Intensity(this.label);
+  final String label;
+}
+
+/// Źródło danych: wpis ręczny albo import (np. Health Connect z opaski Fitbit).
+const manualSource = 'manual';
+
+class WeightEntry {
+  WeightEntry({this.id, required this.day, required this.kg, this.source = manualSource, this.externalId});
+  int? id;
+  DateTime day;
+  double kg;
+  String source;
+  String? externalId;
+
+  Map<String, Object?> toMap() => {'id': id, 'day': dayKey(day), 'kg': kg, 'source': source, 'external_id': externalId};
+
+  factory WeightEntry.fromMap(Map<String, Object?> m) => WeightEntry(
+        id: m['id'] as int?,
+        day: DateTime.parse(m['day'] as String),
+        kg: (m['kg'] as num).toDouble(),
+        source: m['source'] as String,
+        externalId: m['external_id'] as String?,
+      );
+}
+
+class Activity {
+  Activity({
+    this.id,
+    required this.startedAt,
+    required this.type,
+    required this.minutes,
+    this.intensity = Intensity.moderate,
+    this.kcal = 0,
+    this.kcalSource = 'met',
+    this.source = manualSource,
+    this.externalId,
+    this.note,
+  });
+
+  int? id;
+  DateTime startedAt;
+  String type; // klucz z activityTypes
+  int minutes;
+  Intensity intensity;
+  double kcal; // ponad spoczynek
+  String kcalSource; // 'met' (wyliczone), 'manual' (z zegarka, wpisane), 'device' (import)
+  String source;
+  String? externalId;
+  String? note;
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'started_at': startedAt.toIso8601String(),
+        'type': type,
+        'minutes': minutes,
+        'intensity': intensity.name,
+        'kcal': kcal,
+        'kcal_source': kcalSource,
+        'source': source,
+        'external_id': externalId,
+        'note': note,
+      };
+
+  factory Activity.fromMap(Map<String, Object?> m) => Activity(
+        id: m['id'] as int?,
+        startedAt: DateTime.parse(m['started_at'] as String),
+        type: m['type'] as String,
+        minutes: m['minutes'] as int,
+        intensity: Intensity.values.firstWhere((i) => i.name == m['intensity'], orElse: () => Intensity.moderate),
+        kcal: (m['kcal'] as num).toDouble(),
+        kcalSource: m['kcal_source'] as String,
+        source: m['source'] as String,
+        externalId: m['external_id'] as String?,
+        note: m['note'] as String?,
+      );
+}
+
+String dayKey(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
