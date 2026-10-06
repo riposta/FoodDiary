@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../db.dart';
+import '../energy.dart';
 import '../models.dart';
 import '../prefs.dart';
 import '../theme.dart';
+import 'activity_edit.dart';
 import 'entry_edit.dart';
 
 class TodayScreen extends StatefulWidget {
@@ -17,6 +19,10 @@ class TodayScreen extends StatefulWidget {
 class _TodayScreenState extends State<TodayScreen> {
   DateTime _day = dayOf(DateTime.now());
   List<Entry> _entries = [];
+  List<Activity> _acts = [];
+  EnergyEstimate? _energy;
+  DayBudget? _budget;
+  bool _complete = false;
 
   @override
   void initState() {
@@ -25,8 +31,37 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   Future<void> _load() async {
-    final e = await Db.day(_day);
-    if (mounted) setState(() => _entries = e);
+    final day = _day;
+    final entries = await Db.day(day);
+    final acts = await Db.activities(day, day);
+    final energy = await Db.estimate();
+    final budget = await Db.budget(day, energy);
+    final complete = (await Db.completeDays(day, day)).isNotEmpty;
+    if (!mounted || day != _day) return;
+    setState(() {
+      _entries = entries;
+      _acts = acts;
+      _energy = energy;
+      _budget = budget;
+      _complete = complete;
+    });
+  }
+
+  Future<void> _openActivity([Activity? a]) async {
+    final saved =
+        await showActivitySheet(context, activity: a, day: _day, weightKg: _energy?.weight ?? prefs.profile.weight);
+    await _load();
+    if (saved != null && mounted && _budget != null) {
+      final type = activityType(saved.type).label;
+      final time = saved.minutes < 60 ? '${saved.minutes} min' : '${fmtNum(saved.minutes / 60)} h';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$type $time: +${fmtNum(saved.kcal)} kcal. Cel na dziś: ${fmtNum(_budget!.goal)} kcal')));
+    }
+  }
+
+  Future<void> _setComplete(bool v) async {
+    await Db.setDayComplete(_day, v);
+    await _load();
   }
 
   void _shift(int days) {
@@ -35,7 +70,8 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   Future<void> _pickDay() async {
-    final d = await showDatePicker(context: context, initialDate: _day, firstDate: DateTime(2020), lastDate: DateTime.now());
+    final d =
+        await showDatePicker(context: context, initialDate: _day, firstDate: DateTime(2020), lastDate: DateTime.now());
     if (d != null) {
       _day = dayOf(d);
       _load();
@@ -78,22 +114,181 @@ class _TodayScreenState extends State<TodayScreen> {
               onTap: _pickDay,
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 IconButton(
-                    tooltip: 'Poprzedni dzień', icon: const Icon(Icons.chevron_left_rounded), onPressed: () => _shift(-1)),
+                    tooltip: 'Poprzedni dzień',
+                    icon: const Icon(Icons.chevron_left_rounded),
+                    onPressed: () => _shift(-1)),
                 IconButton(
                     tooltip: 'Następny dzień',
                     icon: const Icon(Icons.chevron_right_rounded),
                     onPressed: isToday ? null : () => _shift(1)),
               ]),
             ),
-            SummaryCard(total: sumValues(_entries.map((e) => e.values)), norms: prefs.norms),
+            SummaryCard(
+              total: sumValues(_entries.map((e) => e.values)),
+              norms: _budget == null ? prefs.norms : dayNorms(prefs.profile, prefs.overrides, _budget!.goal),
+              budget: _budget,
+              onTap: _budget == null ? null : () => showBudgetSheet(context, _budget!, _energy!),
+            ),
+            _ActivitySection(acts: _acts, onAdd: () => _openActivity(), onOpen: _openActivity),
             if (_entries.isEmpty) const _EmptyDay(),
             for (final m in MealType.values)
-              if (groups[m] != null) _MealGroup(meal: m, entries: groups[m]!, onOpen: (e) => _open(entry: e), onDeleted: _load),
+              if (groups[m] != null)
+                _MealGroup(meal: m, entries: groups[m]!, onOpen: (e) => _open(entry: e), onDeleted: _load),
+            _CompleteDay(complete: _complete, onChanged: _setComplete),
           ],
         ),
       ),
     );
   }
+}
+
+class _ActivitySection extends StatelessWidget {
+  const _ActivitySection({required this.acts, required this.onAdd, required this.onOpen});
+  final List<Activity> acts;
+  final VoidCallback onAdd;
+  final void Function(Activity) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final total = acts.fold(0.0, (s, a) => s + a.kcal);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 12, 4),
+        child: Row(children: [
+          Text('Aktywność', style: t.titleSmall),
+          if (acts.isNotEmpty) ...[const SizedBox(width: 8), Text('+${fmtNum(total)} kcal', style: t.bodySmall)],
+          const Spacer(),
+          TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Dodaj')),
+        ]),
+      ),
+      if (acts.isEmpty)
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onAdd,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                const Icon(Icons.directions_run_rounded, color: inkMuted),
+                const SizedBox(width: 14),
+                Expanded(child: Text('Trening podniesie dzisiejszy limit kalorii', style: t.bodySmall)),
+              ]),
+            ),
+          ),
+        )
+      else
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(children: [
+            for (final (i, a) in acts.indexed) ...[
+              if (i > 0) const Divider(indent: 64),
+              InkWell(
+                onTap: () => onOpen(a),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
+                  child: Row(children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration:
+                          BoxDecoration(color: const Color(0xFFE9F3EF), borderRadius: BorderRadius.circular(10)),
+                      child: Icon(activityType(a.type).icon, size: 20, color: const Color(0xFF5E9C86)),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(activityType(a.type).label, style: t.titleSmall),
+                        Text(
+                          '${DateFormat('HH:mm').format(a.startedAt)}, ${a.minutes} min, ${a.intensity.label.toLowerCase()}'
+                          '${a.kcalSource == 'met' ? '' : ', z zegarka'}',
+                          style: t.bodySmall,
+                        ),
+                      ]),
+                    ),
+                    Text('+${fmtNum(a.kcal)} kcal', style: t.titleSmall?.copyWith(color: const Color(0xFF4F8B76))),
+                  ]),
+                ),
+              ),
+            ],
+          ]),
+        ),
+    ]);
+  }
+}
+
+/// Zatwierdzenie dnia jako pełnego: wtedy liczy się do zapotrzebowania nawet z jednym posiłkiem.
+class _CompleteDay extends StatelessWidget {
+  const _CompleteDay({required this.complete, required this.onChanged});
+  final bool complete;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: complete
+          ? Row(children: [
+              const SizedBox(width: 8),
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF5E9C86), size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Text('Dzień zatwierdzony jako pełny', style: t.bodyMedium)),
+              TextButton(onPressed: () => onChanged(false), child: const Text('Cofnij')),
+            ])
+          : OutlinedButton.icon(
+              onPressed: () => onChanged(true),
+              icon: const Icon(Icons.task_alt_rounded),
+              label: const Text('Zatwierdź dzień jako pełny'),
+            ),
+    );
+  }
+}
+
+/// Rozbicie celu dnia: baza (wzór/pomiar) + aktywność − deficyt.
+void showBudgetSheet(BuildContext context, DayBudget b, EnergyEstimate e) {
+  final t = Theme.of(context).textTheme;
+  Widget row(String label, String value, {String? hint, bool strong = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: strong ? t.titleMedium : t.bodyMedium),
+              if (hint != null) Text(hint, style: t.bodySmall),
+            ]),
+          ),
+          Text(value, style: strong ? t.titleMedium : t.titleSmall),
+        ]),
+      );
+  final source = e.confidence < .05
+      ? 'Z wzoru: za mało danych o wadze i jedzeniu'
+      : e.confidence > .95
+          ? 'Zmierzone z ${e.okDays} pełnych dni i trendu wagi'
+          : 'Wzór + pomiar z ${e.okDays} pełnych dni (pewność ${(e.confidence * 100).round()}%)';
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.white,
+    showDragHandle: true,
+    builder: (c) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Skąd ten limit', style: t.titleLarge),
+          const SizedBox(height: 12),
+          row('Zapotrzebowanie bez treningów', '${fmtNum(b.base)} kcal', hint: source),
+          row('Aktywność dziś', '+${fmtNum(b.activity)} kcal'),
+          const Divider(),
+          row('Utrzymanie wagi', '${fmtNum(b.maintenance)} kcal', hint: 'Tyle możesz zjeść, żeby waga stała'),
+          if (b.deficit > 0)
+            row('Deficyt', '−${fmtNum(b.deficit)} kcal', hint: 'Tempo ${fmtNum(prefs.rateKgWeek)} kg/tydz.'),
+          const Divider(),
+          row('Cel na dziś', '${fmtNum(b.goal)} kcal',
+              strong: true,
+              hint: b.goal <= e.bmr + 1 ? 'Nie schodzimy poniżej przemiany podstawowej (${fmtNum(e.bmr)} kcal)' : null),
+        ]),
+      ),
+    ),
+  );
 }
 
 class _EmptyDay extends StatelessWidget {
@@ -201,7 +396,11 @@ class Thumb extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: entry.photo != null
             ? Image.file(Db.photoFile(entry.photo!),
-                width: size, height: size, fit: BoxFit.cover, cacheWidth: (size * 3).round(), errorBuilder: (_, __, ___) => _icon())
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                cacheWidth: (size * 3).round(),
+                errorBuilder: (_, __, ___) => _icon())
             : _icon(),
       );
 
@@ -219,10 +418,13 @@ class Thumb extends StatelessWidget {
 
 /// Podsumowanie: pierścień kcal (zostało / ponad normę), trzy makro i kompaktowa siatka reszty.
 class SummaryCard extends StatelessWidget {
-  const SummaryCard({super.key, required this.total, required this.norms, this.title, this.average = false});
+  const SummaryCard(
+      {super.key, required this.total, required this.norms, this.title, this.average = false, this.budget, this.onTap});
   final Values total;
   final Values norms;
   final String? title;
+  final DayBudget? budget; // dzień: pokazujemy cel i utrzymanie
+  final VoidCallback? onTap;
   final bool average; // statystyki: w środku pierścienia średnia zamiast "zostało"
 
   @override
@@ -233,57 +435,68 @@ class SummaryCard extends StatelessWidget {
     final over = kcal > norm;
     Nutrient n(String k) => nutrients.firstWhere((x) => x.key == k);
 
+    final b = budget;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (title != null) ...[Text(title!, style: t.titleSmall), const SizedBox(height: 16)],
-          Row(children: [
-            SizedBox.square(
-              dimension: 116,
-              child: Stack(fit: StackFit.expand, children: [
-                CircularProgressIndicator(
-                  value: pct.clamp(0, 1).toDouble(),
-                  strokeWidth: 9,
-                  strokeCap: StrokeCap.round,
-                  backgroundColor: track,
-                  color: over ? overBar : blush,
-                ),
-                Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text(fmtNum(average ? kcal : (norm - kcal).abs()), style: t.titleLarge?.copyWith(fontSize: 24)),
-                    Text(average ? 'kcal średnio' : (over ? 'kcal ponad normę' : 'kcal zostało'),
-                        style: t.labelSmall?.copyWith(color: over && !average ? overText : inkMuted)),
-                  ]),
-                ),
-              ]),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                _Stat(label: average ? 'Średnio dziennie' : 'Zjedzone', value: '${fmtNum(kcal)} kcal'),
-                const SizedBox(height: 12),
-                _Stat(label: 'Dzienna norma', value: '${fmtNum(norm)} kcal'),
-                const SizedBox(height: 12),
-                _Stat(label: 'Realizacja', value: '${(pct * 100).round()}%', color: over ? overText : null),
-              ]),
-            ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (title != null) ...[Text(title!, style: t.titleSmall), const SizedBox(height: 16)],
+            Row(children: [
+              SizedBox.square(
+                dimension: 116,
+                child: Stack(fit: StackFit.expand, children: [
+                  CircularProgressIndicator(
+                    value: pct.clamp(0, 1).toDouble(),
+                    strokeWidth: 9,
+                    strokeCap: StrokeCap.round,
+                    backgroundColor: track,
+                    color: over ? overBar : blush,
+                  ),
+                  Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(fmtNum(average ? kcal : (norm - kcal).abs()), style: t.titleLarge?.copyWith(fontSize: 24)),
+                      Text(average ? 'kcal średnio' : (over ? 'kcal ponad normę' : 'kcal zostało'),
+                          style: t.labelSmall?.copyWith(color: over && !average ? overText : inkMuted)),
+                    ]),
+                  ),
+                ]),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _Stat(label: average ? 'Średnio dziennie' : 'Zjedzone', value: '${fmtNum(kcal)} kcal'),
+                  const SizedBox(height: 12),
+                  _Stat(label: b == null ? 'Dzienna norma' : 'Cel na dziś', value: '${fmtNum(norm)} kcal'),
+                  const SizedBox(height: 12),
+                  if (b == null)
+                    _Stat(label: 'Realizacja', value: '${(pct * 100).round()}%', color: over ? overText : null)
+                  else
+                    _Stat(
+                      label: b.activity > 0 ? 'Utrzymanie (z treningiem)' : 'Utrzymanie',
+                      value: '${fmtNum(b.maintenance)} kcal',
+                    ),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 20),
+            Row(children: [
+              for (final k in ['protein', 'fat', 'carbs']) ...[
+                if (k != 'protein') const SizedBox(width: 14),
+                Expanded(child: _Macro(n: n(k), value: total[k]!, norm: norms[k]!)),
+              ],
+            ]),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            Wrap(runSpacing: 10, children: [
+              for (final k in ['sat_fat', 'sugars', 'fiber', 'salt'])
+                FractionallySizedBox(widthFactor: .5, child: _MiniRow(n: n(k), value: total[k]!, norm: norms[k]!)),
+            ]),
           ]),
-          const SizedBox(height: 20),
-          Row(children: [
-            for (final k in ['protein', 'fat', 'carbs']) ...[
-              if (k != 'protein') const SizedBox(width: 14),
-              Expanded(child: _Macro(n: n(k), value: total[k]!, norm: norms[k]!)),
-            ],
-          ]),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 12),
-          Wrap(runSpacing: 10, children: [
-            for (final k in ['sat_fat', 'sugars', 'fiber', 'salt'])
-              FractionallySizedBox(widthFactor: .5, child: _MiniRow(n: n(k), value: total[k]!, norm: norms[k]!)),
-          ]),
-        ]),
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../db.dart';
+import '../energy.dart';
 import '../models.dart';
 import '../prefs.dart';
 import '../theme.dart';
@@ -21,6 +22,7 @@ class _StatsScreenState extends State<StatsScreen> {
   bool _month = false;
   late DateTime _from;
   List<Entry> _entries = [];
+  Map<DateTime, double> _goals = {}; // cel każdego dnia (z treningami i deficytem)
 
   @override
   void initState() {
@@ -42,14 +44,29 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Future<void> _load() async {
-    final e = await Db.range(_from, _to);
-    if (mounted) setState(() => _entries = e);
+    final from = _from, to = _to;
+    final e = await Db.range(from, to);
+    final energy = await Db.estimate();
+    final act = <DateTime, double>{};
+    for (final a in await Db.activities(from, to)) {
+      act.update(dayOf(a.startedAt), (v) => v + a.kcal, ifAbsent: () => a.kcal);
+    }
+    final goals = {
+      for (var d = from; !d.isAfter(to); d = DateTime(d.year, d.month, d.day + 1))
+        d: dayBudget(energy, act[d] ?? 0,
+                rateKgWeek: prefs.rateKgWeek, goalWeight: prefs.goalWeight, kcalOverride: prefs.overrides['kcal'])
+            .goal,
+    };
+    if (mounted && from == _from) setState(() => (_entries = e, _goals = goals));
   }
 
   @override
   Widget build(BuildContext context) {
-    final norms = prefs.norms;
     final days = byDay(_entries);
+    // średni cel z dni z wpisami (albo z całego okresu, gdy brak wpisów)
+    final goalDays = days.isEmpty ? _goals.values : days.keys.map((d) => _goals[d] ?? 0);
+    final avgGoal = goalDays.isEmpty ? prefs.norms['kcal']! : goalDays.reduce((a, b) => a + b) / goalDays.length;
+    final norms = dayNorms(prefs.profile, prefs.overrides, avgGoal);
     final n = _month ? _to.day : 7;
     final dates = [for (var i = 0; i < n; i++) DateTime(_from.year, _from.month, _from.day + i)];
     final kcal = [for (final d in dates) sumValues((days[d] ?? []).map((e) => e.values))['kcal']!];
@@ -88,9 +105,12 @@ class _StatsScreenState extends State<StatsScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Padding(
                 padding: const EdgeInsets.only(left: 8, bottom: 16),
-                child: Text('Kalorie dziennie', style: Theme.of(context).textTheme.titleSmall),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Kalorie dziennie', style: Theme.of(context).textTheme.titleSmall),
+                  Text('Jasne tło słupka to cel danego dnia', style: Theme.of(context).textTheme.bodySmall),
+                ]),
               ),
-              SizedBox(height: 220, child: _chart(dates, kcal, norms['kcal']!)),
+              SizedBox(height: 220, child: _chart(dates, kcal, [for (final d in dates) _goals[d] ?? avgGoal])),
             ]),
           ),
         ),
@@ -104,8 +124,8 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _chart(List<DateTime> dates, List<double> kcal, double norm) {
-    final maxY = max(norm, kcal.fold(0.0, max)) * 1.15;
+  Widget _chart(List<DateTime> dates, List<double> kcal, List<double> goals) {
+    final maxY = max(goals.fold(0.0, max), kcal.fold(0.0, max)) * 1.15;
     return BarChart(BarChartData(
       maxY: maxY,
       barGroups: [
@@ -114,25 +134,13 @@ class _StatsScreenState extends State<StatsScreen> {
             BarChartRodData(
               toY: kcal[i],
               width: _month ? 6 : 22,
-              color: lilac,
+              color: kcal[i] > goals[i] ? overBar : lilac,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              // tło słupka = cel tego dnia (z treningiem wyższy)
+              backDrawRodData: BackgroundBarChartRodData(show: true, toY: goals[i], color: track),
             ),
           ]),
       ],
-      extraLinesData: ExtraLinesData(horizontalLines: [
-        HorizontalLine(
-          y: norm,
-          color: overBar,
-          strokeWidth: 1.2,
-          dashArray: [6, 4],
-          label: HorizontalLineLabel(
-            show: true,
-            alignment: Alignment.topRight,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: overText),
-            labelResolver: (_) => 'norma ${fmtNum(norm)}',
-          ),
-        ),
-      ]),
       gridData: FlGridData(
         drawVerticalLine: false,
         getDrawingHorizontalLine: (_) => const FlLine(color: track, strokeWidth: 1),
@@ -169,7 +177,7 @@ class _StatsScreenState extends State<StatsScreen> {
         touchTooltipData: BarTouchTooltipData(
           getTooltipColor: (_) => ink,
           getTooltipItem: (g, _, rod, __) => BarTooltipItem(
-            '${DateFormat('EEE d MMM').format(dates[g.x])}\n${fmtNum(rod.toY)} kcal (${(rod.toY / norm * 100).round()}%)',
+            '${DateFormat('EEE d MMM').format(dates[g.x])}\n${fmtNum(rod.toY)} z ${fmtNum(goals[g.x])} kcal',
             const TextStyle(color: Colors.white, fontSize: 12),
           ),
         ),
