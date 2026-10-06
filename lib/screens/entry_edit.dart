@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../ai.dart';
 import '../db.dart';
+import '../energy.dart';
 import '../models.dart';
 import '../prefs.dart';
 import '../theme.dart';
@@ -21,8 +22,10 @@ class EntryEditScreen extends StatefulWidget {
 
 class _EntryEditScreenState extends State<EntryEditScreen> {
   late DateTime _eatenAt;
-  File? _photo; // zapisane lub świeżo wybrane zdjęcie
+  static const _maxPhotos = 3;
+  final List<File> _photos = []; // [0] = główne (trafia do historii), reszta tylko do analizy
   bool _photoChanged = false;
+  Values? _norms; // normy dnia wpisu (z aktywnościami i celem)
   late String _desc;
   Entry? _draft; // formularz widoczny po analizie / przy edycji
   int _formVersion = 0; // odświeża pola formularza po ponownej analizie
@@ -36,15 +39,62 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
     final d = widget.day ?? now;
     _eatenAt = e?.eatenAt ?? DateTime(d.year, d.month, d.day, now.hour, now.minute);
     _desc = e?.description ?? '';
-    if (e?.photo != null) _photo = Db.photoFile(e!.photo!);
+    if (e?.photo != null) _photos.add(Db.photoFile(e!.photo!));
     _draft = e;
+    _loadNorms();
+  }
+
+  Future<void> _loadNorms() async {
+    final b = await Db.budget(_eatenAt, await Db.estimate());
+    if (mounted) setState(() => _norms = dayNorms(prefs.profile, prefs.overrides, b.goal));
   }
 
   void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   Future<void> _pick(ImageSource src) async {
-    final x = await ImagePicker().pickImage(source: src, maxWidth: 1280, maxHeight: 1280, imageQuality: 80);
-    if (x != null) setState(() => (_photo = File(x.path), _photoChanged = true));
+    final left = _maxPhotos - _photos.length;
+    if (left <= 0) return;
+    final picker = ImagePicker();
+    final List<XFile> picked;
+    if (src == ImageSource.camera) {
+      final x = await picker.pickImage(source: src, maxWidth: 1280, maxHeight: 1280, imageQuality: 80);
+      picked = x == null ? [] : [x];
+    } else {
+      picked = await picker.pickMultiImage(limit: left, maxWidth: 1280, maxHeight: 1280, imageQuality: 80);
+    }
+    if (picked.isEmpty) return;
+    setState(() {
+      _photos.addAll(picked.take(left).map((x) => File(x.path)));
+      _photoChanged = true;
+    });
+  }
+
+  Future<void> _photoMenu(int i) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (i > 0)
+            ListTile(
+              leading: const Icon(Icons.star_outline_rounded),
+              title: const Text('Ustaw jako główne'),
+              subtitle: const Text('To zdjęcie zostanie w historii'),
+              onTap: () => Navigator.pop(c, 'main'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline_rounded),
+            title: const Text('Usuń zdjęcie'),
+            onTap: () => Navigator.pop(c, 'delete'),
+          ),
+        ]),
+      ),
+    );
+    if (action == null) return;
+    setState(() {
+      final f = _photos.removeAt(i);
+      if (action == 'main') _photos.insert(0, f);
+      _photoChanged = true;
+    });
   }
 
   Future<void> _pickDateTime() async {
@@ -57,11 +107,11 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
   }
 
   Future<void> _analyze() async {
-    if (_photo == null && _desc.trim().isEmpty) return _snack('Dodaj zdjęcie lub opis');
+    if (_photos.isEmpty && _desc.trim().isEmpty) return _snack('Dodaj zdjęcie lub opis');
     FocusScope.of(context).unfocus();
     setState(() => _busy = true);
     try {
-      final r = await analyze(photo: _photo, description: _desc, eatenAt: _eatenAt);
+      final r = await analyze(photos: _photos, description: _desc, eatenAt: _eatenAt);
       setState(() {
         final d = _draft ??= Entry(eatenAt: _eatenAt, mealType: r.mealType, name: r.name);
         d
@@ -86,11 +136,13 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
     if (d.name.trim().isEmpty) return _snack('Podaj nazwę');
     setState(() => _busy = true);
     try {
-      if (_photoChanged) {
-        final old = d.photo;
-        if (_photo != null) {
+      // do historii trafia tylko zdjęcie główne; pozostałe służyły wyłącznie analizie
+      final main = _photos.firstOrNull;
+      final old = d.photo;
+      if (_photoChanged && main?.path != (old == null ? null : Db.photoFile(old).path)) {
+        if (main != null) {
           final name = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-          await _photo!.copy(Db.photoFile(name).path);
+          await main.copy(Db.photoFile(name).path);
           d.photo = name;
         } else {
           d.photo = null;
@@ -119,7 +171,7 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final norms = prefs.norms;
+    final norms = _norms ?? prefs.norms;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.entry == null ? 'Nowy wpis' : 'Edycja wpisu'),
@@ -177,50 +229,72 @@ class _EntryEditScreenState extends State<EntryEditScreen> {
   static final _compact = FilledButton.styleFrom(minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 18));
 
   Widget _photoBox() {
+    final t = Theme.of(context).textTheme;
+    final full = _photos.length >= _maxPhotos;
     final buttons = Row(mainAxisAlignment: MainAxisAlignment.center, children: [
       FilledButton.tonalIcon(
           style: _compact,
-          onPressed: () => _pick(ImageSource.camera),
+          onPressed: full ? null : () => _pick(ImageSource.camera),
           icon: const Icon(Icons.photo_camera_outlined),
           label: const Text('Aparat')),
       const SizedBox(width: 12),
       FilledButton.tonalIcon(
           style: _compact,
-          onPressed: () => _pick(ImageSource.gallery),
+          onPressed: full ? null : () => _pick(ImageSource.gallery),
           icon: const Icon(Icons.photo_library_outlined),
           label: const Text('Galeria')),
     ]);
-    if (_photo == null) {
+    if (_photos.isEmpty) {
       return Container(
-        height: 160,
-        decoration: BoxDecoration(
-            color: Colors.white, border: Border.all(color: line), borderRadius: BorderRadius.circular(20)),
+        height: 172,
+        decoration: BoxDecoration(color: Colors.white, border: Border.all(color: line), borderRadius: BorderRadius.circular(20)),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text('Dodaj zdjęcie posiłku', style: Theme.of(context).textTheme.titleSmall),
+          Text('Dodaj zdjęcie posiłku', style: t.titleSmall),
           const SizedBox(height: 4),
-          Text('albo pomiń i wpisz sam opis', style: Theme.of(context).textTheme.bodySmall),
+          Text('Do 3 zdjęć, np. potrawa i etykieta ze składem', style: t.bodySmall),
           const SizedBox(height: 16),
           buttons,
         ]),
       );
     }
-    return Column(children: [
-      Stack(children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Image.file(_photo!, height: 240, width: double.infinity, fit: BoxFit.cover),
-        ),
-        Positioned(
-          right: 8,
-          top: 8,
-          child: IconButton.filledTonal(
-            icon: const Icon(Icons.close),
-            onPressed: () => setState(() => (_photo = null, _photoChanged = true)),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      GestureDetector(
+        onTap: () => _photoMenu(0),
+        child: Stack(children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.file(_photos.first, height: 240, width: double.infinity, fit: BoxFit.cover),
           ),
-        ),
-      ]),
-      const SizedBox(height: 8),
-      buttons,
+          if (_photos.length > 1)
+            Positioned(
+              left: 10,
+              top: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: .9), borderRadius: BorderRadius.circular(10)),
+                child: Text('Główne, zostaje w historii', style: t.labelSmall?.copyWith(color: ink)),
+              ),
+            ),
+        ]),
+      ),
+      if (_photos.length > 1) ...[
+        const SizedBox(height: 8),
+        Row(children: [
+          for (var i = 1; i < _photos.length; i++) ...[
+            GestureDetector(
+              onTap: () => _photoMenu(i),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(_photos[i], width: 72, height: 72, fit: BoxFit.cover, cacheWidth: 216),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(child: Text('Dodatkowe zdjęcia idą tylko do analizy. Stuknij, aby zmienić.', style: t.bodySmall)),
+        ]),
+      ],
+      const SizedBox(height: 10),
+      if (full) Center(child: Text('Masz już 3 zdjęcia', style: t.bodySmall)) else buttons,
     ]);
   }
 

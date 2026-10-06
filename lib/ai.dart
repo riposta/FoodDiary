@@ -23,6 +23,7 @@ Odpowiedz WYŁĄCZNIE jednym obiektem JSON (bez markdown, bez komentarzy) z pola
 - meal_type: jedno z: breakfast, second_breakfast, lunch, snack, dinner, drink,
 - kcal, protein, fat, sat_fat, carbs, sugars, fiber, salt: liczby dla CAŁEJ porcji (kcal oraz gramy),
 - notes: jedno-dwa zdania po polsku o przyjętych założeniach.
+Możesz dostać do 3 zdjęć tego samego posiłku: potrawę z różnych stron i/lub etykietę produktu (skład, tabela wartości odżywczych). Wartości z etykiety mają pierwszeństwo, przelicz je na zjedzoną porcję.
 Jeśli opis podaje składniki lub ilości, mają pierwszeństwo przed zdjęciem. Same napoje (woda, kawa, herbata, sok) to meal_type "drink". Typ posiłku dobierz też na podstawie godziny.''';
 
 /// Wyciąga dane wpisu z odpowiedzi modelu. Toleruje JSON owinięty w markdown/tekst.
@@ -60,16 +61,16 @@ Entry parseAiResponse(String content, DateTime eatenAt) {
   );
 }
 
-Future<Entry> analyze({File? photo, String? description, required DateTime eatenAt}) async {
+Future<Entry> analyze({List<File> photos = const [], String? description, required DateTime eatenAt}) async {
   if (prefs.apiKey.isEmpty) throw AiException('Ustaw klucz API w zakładce Ustawienia.');
   final desc = description?.trim() ?? '';
   final content = [
     {
       'type': 'text',
       'text': 'Godzina posiłku: ${DateFormat('HH:mm').format(eatenAt)}.\n'
-          '${desc.isEmpty ? 'Brak opisu — oceń na podstawie zdjęcia.' : 'Opis: $desc'}',
+          '${desc.isEmpty ? 'Brak opisu — oceń na podstawie zdjęć.' : 'Opis: $desc'}',
     },
-    if (photo != null)
+    for (final photo in photos)
       {
         'type': 'image_url',
         'image_url': {
